@@ -46,7 +46,7 @@ const Button: React.FC<ButtonProps> = ({
         >
 
             {loading && (
-                <Loader />
+                <Loader size="sm" />
             )}
 
             {!loading && leftIcon}

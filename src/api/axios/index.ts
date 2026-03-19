@@ -1,5 +1,6 @@
 import axios from "axios";
 import { store } from "@/redux/store";
+import { clearToken } from "@/redux/slices/auth.slice";
 
 const axiosInstance = axios.create(
     {
@@ -24,7 +25,8 @@ axiosInstance.interceptors.response.use(
 
         switch (status) {
             case 401:
-                console.log("Unauthorized - redirect to login");
+                store.dispatch(clearToken());
+                window.location.href = "/login";
                 break;
 
             case 403:
