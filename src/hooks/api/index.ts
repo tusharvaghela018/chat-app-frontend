@@ -1,19 +1,27 @@
 import axiosInstance from "@/api/axios";
 import { useMutation, useQuery, type UseMutationOptions, type UseQueryOptions } from "@tanstack/react-query";
 
+export interface ApiResponse<T = unknown> {
+    success?: boolean;
+    message?: string;
+    data?: T;
+    error?: unknown;
+    show_toast?: boolean;
+}
+
 export const useGetApi = <
-    TResponse,
+    TData,
     TParams extends Record<string, any> = {}
 >(
     queryKey: string,
     url: string,
     params?: TParams,
-    options?: UseQueryOptions<TResponse>
+    options?: UseQueryOptions<ApiResponse<TData>>
 ) => {
-    return useQuery<TResponse>({
+    return useQuery<ApiResponse<TData>>({
         queryKey: [queryKey, params],
         queryFn: async () => {
-            const { data } = await axiosInstance.get<TResponse>(url, { params });
+            const { data } = await axiosInstance.get<ApiResponse<TData>>(url, { params });
             return data;
         },
         ...options,
@@ -21,15 +29,15 @@ export const useGetApi = <
 };
 
 export const usePostApi = <
-    TResponse,
+    TData,
     TBody = unknown
 >(
     url: string,
-    options?: UseMutationOptions<TResponse, unknown, TBody>
+    options?: UseMutationOptions<ApiResponse<TData>, unknown, TBody>
 ) => {
-    return useMutation<TResponse, unknown, TBody>({
+    return useMutation<ApiResponse<TData>, unknown, TBody>({
         mutationFn: async (body: TBody) => {
-            const { data } = await axiosInstance.post<TResponse>(url, body);
+            const { data } = await axiosInstance.post<ApiResponse<TData>>(url, body);
             return data;
         },
         ...options,
@@ -37,15 +45,26 @@ export const usePostApi = <
 };
 
 export const usePutApi = <
-    TResponse,
+    TData,
     TBody = unknown
 >(
     url: string,
-    options?: UseMutationOptions<TResponse, unknown, { id: string | number; body: TBody }>
+    options?: UseMutationOptions<
+        ApiResponse<TData>,
+        unknown,
+        { id: string | number; body: TBody }
+    >
 ) => {
-    return useMutation<TResponse, unknown, { id: string | number; body: TBody }>({
+    return useMutation<
+        ApiResponse<TData>,
+        unknown,
+        { id: string | number; body: TBody }
+    >({
         mutationFn: async ({ id, body }) => {
-            const { data } = await axiosInstance.put<TResponse>(`${url}/${id}`, body);
+            const { data } = await axiosInstance.put<ApiResponse<TData>>(
+                `${url}/${id}`,
+                body
+            );
             return data;
         },
         ...options,
@@ -53,15 +72,26 @@ export const usePutApi = <
 };
 
 export const usePatchApi = <
-    TResponse,
+    TData,
     TBody = unknown
 >(
     url: string,
-    options?: UseMutationOptions<TResponse, unknown, { id: string | number; body: TBody }>
+    options?: UseMutationOptions<
+        ApiResponse<TData>,
+        unknown,
+        { id: string | number; body: TBody }
+    >
 ) => {
-    return useMutation<TResponse, unknown, { id: string | number; body: TBody }>({
+    return useMutation<
+        ApiResponse<TData>,
+        unknown,
+        { id: string | number; body: TBody }
+    >({
         mutationFn: async ({ id, body }) => {
-            const { data } = await axiosInstance.patch<TResponse>(`${url}/${id}`, body);
+            const { data } = await axiosInstance.patch<ApiResponse<TData>>(
+                `${url}/${id}`,
+                body
+            );
             return data;
         },
         ...options,
@@ -69,15 +99,17 @@ export const usePatchApi = <
 };
 
 export const useDeleteApi = <
-    TResponse,
+    TData,
     TId extends string | number = string | number
 >(
     url: string,
-    options?: UseMutationOptions<TResponse, unknown, TId>
+    options?: UseMutationOptions<ApiResponse<TData>, unknown, TId>
 ) => {
-    return useMutation<TResponse, unknown, TId>({
+    return useMutation<ApiResponse<TData>, unknown, TId>({
         mutationFn: async (id: TId) => {
-            const { data } = await axiosInstance.delete<TResponse>(`${url}/${id}`);
+            const { data } = await axiosInstance.delete<ApiResponse<TData>>(
+                `${url}/${id}`
+            );
             return data;
         },
         ...options,

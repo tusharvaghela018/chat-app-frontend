@@ -6,8 +6,9 @@ import { useDispatch } from "react-redux";
 import Input from "@/common/Input";
 import Button from "@/common/Button";
 import { usePostApi } from "@/hooks/api";
-import { setToken } from "@/redux/slices/auth.slice";
+import { setToken, setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
+import useToast from "@/hooks/toast";
 
 interface LoginForm {
     email: string;
@@ -15,18 +16,14 @@ interface LoginForm {
 }
 
 interface LoginResponse {
-    success: boolean
-    data: {
-        token: string;
-        user: { id: number; name: string; email: string; avatar?: string };
-    },
-    message: string | null,
-    error: string | null
+    token: string;
+    user: { id: number; name: string; is_online: boolean; avatar?: string };
 }
 
 const Login = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const toast = useToast()
 
     const {
         register,
@@ -39,7 +36,18 @@ const Login = () => {
         "/auth/login",
         {
             onSuccess: (response) => {
-                dispatch(setToken(response.data.token));
+                dispatch(setToken(response.data?.token || ""));
+                const { id, name, avatar, is_online } = { ...response.data?.user }
+                const userData = {
+                    id: Number(id),
+                    name: String(name),
+                    avatar: String(avatar),
+                    is_online: is_online || false
+                }
+                dispatch(setUser(userData))
+                if (response.show_toast && response.message) {
+                    toast.success(response.message)
+                }
                 navigate(ROUTES.DASHBOARD.path);
             },
             onError: (error: any) => {

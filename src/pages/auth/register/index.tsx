@@ -6,7 +6,7 @@ import { useDispatch } from "react-redux";
 import Input from "@/common/Input";
 import Button from "@/common/Button";
 import { usePostApi } from "@/hooks/api";
-import { setToken } from "@/redux/slices/auth.slice";
+import { setToken, setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 
 interface RegisterForm {
@@ -18,7 +18,7 @@ interface RegisterForm {
 
 interface RegisterResponse {
     token: string;
-    user: { id: number; name: string; email: string };
+    user: { id: number; name: string; avatar: string, is_online: boolean };
 }
 
 const Register = () => {
@@ -37,7 +37,15 @@ const Register = () => {
         "/auth/register",
         {
             onSuccess: (data) => {
-                dispatch(setToken(data.token));
+                const { id, name, avatar, is_online } = { ...data.data?.user }
+                const userData = {
+                    id: Number(id),
+                    name: String(name),
+                    avatar: String(avatar),
+                    is_online: is_online || false
+                }
+                dispatch(setToken(data.data?.token || ''));
+                dispatch(setUser(userData))
                 navigate(ROUTES.DASHBOARD.path);
             },
             onError: (error: any) => {
