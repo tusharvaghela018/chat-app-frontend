@@ -2,6 +2,8 @@ import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock } from "lucide-react";
 import { useDispatch } from "react-redux";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
 
 import Input from "@/common/Input";
 import Button from "@/common/Button";
@@ -9,6 +11,7 @@ import { usePostApi } from "@/hooks/api";
 import { setToken, setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import useToast from "@/hooks/toast";
+import axios from "axios";
 
 interface LoginForm {
     email: string;
@@ -20,6 +23,17 @@ interface LoginResponse {
     user: { id: number; name: string; is_online: boolean; avatar?: string };
 }
 
+const loginSchema = yup.object({
+    email: yup
+        .string()
+        .required("Email is required")
+        .email("Enter a valid email"),
+    password: yup
+        .string()
+        .required("Password is required")
+        .min(6, "Minimum 6 characters"),
+});
+
 const Login = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
@@ -30,7 +44,11 @@ const Login = () => {
         handleSubmit,
         formState: { errors },
         setError,
-    } = useForm<LoginForm>();
+    } = useForm<LoginForm>(
+        {
+            resolver: yupResolver(loginSchema)
+        }
+    );
 
     const { mutate: login, isPending } = usePostApi<LoginResponse, LoginForm>(
         "/auth/login",
@@ -50,8 +68,10 @@ const Login = () => {
                 }
                 navigate(ROUTES.DASHBOARD.path);
             },
-            onError: (error: any) => {
-                const message = error?.response?.data?.message || "Invalid email or password";
+            onError: (error) => {
+                const message = axios.isAxiosError(error)
+                    ? error.response?.data?.message || "Invalid email or password"
+                    : "Invalid email or password";
                 setError("root", { message });
             },
         }
@@ -89,10 +109,7 @@ const Login = () => {
                             type="email"
                             placeholder="you@example.com"
                             leftIcon={<Mail size={16} />}
-                            register={register("email", {
-                                required: "Email is required",
-                                pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: "Enter a valid email" },
-                            })}
+                            register={register("email")}
                             error={errors.email?.message}
                         />
 
@@ -101,10 +118,7 @@ const Login = () => {
                             isPassword
                             placeholder="Enter your password"
                             leftIcon={<Lock size={16} />}
-                            register={register("password", {
-                                required: "Password is required",
-                                minLength: { value: 6, message: "Minimum 6 characters" },
-                            })}
+                            register={register("password")}
                             error={errors.password?.message}
                         />
 

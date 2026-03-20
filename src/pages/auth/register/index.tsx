@@ -2,6 +2,9 @@ import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, User } from "lucide-react";
 import { useDispatch } from "react-redux";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
+import axios from "axios";
 
 import Input from "@/common/Input";
 import Button from "@/common/Button";
@@ -18,8 +21,27 @@ interface RegisterForm {
 
 interface RegisterResponse {
     token: string;
-    user: { id: number; name: string; avatar: string, is_online: boolean };
+    user: { id: number; name: string; avatar: string; is_online: boolean };
 }
+
+const registerSchema = yup.object({
+    name: yup
+        .string()
+        .required("Name is required")
+        .min(2, "Name must be at least 2 characters"),
+    email: yup
+        .string()
+        .required("Email is required")
+        .email("Enter a valid email"),
+    password: yup
+        .string()
+        .required("Password is required")
+        .min(6, "Minimum 6 characters"),
+    confirmPassword: yup
+        .string()
+        .required("Please confirm your password")
+        .oneOf([yup.ref("password")], "Passwords do not match"),
+});
 
 const Register = () => {
     const navigate = useNavigate();
@@ -28,28 +50,31 @@ const Register = () => {
     const {
         register,
         handleSubmit,
-        watch,
         formState: { errors },
         setError,
-    } = useForm<RegisterForm>();
+    } = useForm<RegisterForm>({
+        resolver: yupResolver(registerSchema),
+    });
 
     const { mutate: signup, isPending } = usePostApi<RegisterResponse, Omit<RegisterForm, "confirmPassword">>(
         "/auth/register",
         {
-            onSuccess: (data) => {
-                const { id, name, avatar, is_online } = { ...data.data?.user }
+            onSuccess: (response) => {
+                const { id, name, avatar, is_online } = response.data?.user ?? {};
                 const userData = {
                     id: Number(id),
                     name: String(name),
                     avatar: String(avatar),
-                    is_online: is_online || false
-                }
-                dispatch(setToken(data.data?.token || ''));
-                dispatch(setUser(userData))
+                    is_online: is_online || false,
+                };
+                dispatch(setToken(response.data?.token || ""));
+                dispatch(setUser(userData));
                 navigate(ROUTES.DASHBOARD.path);
             },
-            onError: (error: any) => {
-                const message = error?.response?.data?.message || "Registration failed";
+            onError: (error) => {
+                const message = axios.isAxiosError(error)
+                    ? error.response?.data?.message || "Registration failed"
+                    : "Registration failed";
                 setError("root", { message });
             },
         }
@@ -91,10 +116,7 @@ const Register = () => {
                             label="Full name"
                             placeholder="John Doe"
                             leftIcon={<User size={16} />}
-                            register={register("name", {
-                                required: "Name is required",
-                                minLength: { value: 2, message: "Name must be at least 2 characters" },
-                            })}
+                            register={register("name")}
                             error={errors.name?.message}
                         />
 
@@ -103,10 +125,7 @@ const Register = () => {
                             type="email"
                             placeholder="you@example.com"
                             leftIcon={<Mail size={16} />}
-                            register={register("email", {
-                                required: "Email is required",
-                                pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: "Enter a valid email" },
-                            })}
+                            register={register("email")}
                             error={errors.email?.message}
                         />
 
@@ -115,10 +134,7 @@ const Register = () => {
                             isPassword
                             placeholder="Create a password"
                             leftIcon={<Lock size={16} />}
-                            register={register("password", {
-                                required: "Password is required",
-                                minLength: { value: 6, message: "Minimum 6 characters" },
-                            })}
+                            register={register("password")}
                             error={errors.password?.message}
                         />
 
@@ -127,11 +143,7 @@ const Register = () => {
                             isPassword
                             placeholder="Re-enter your password"
                             leftIcon={<Lock size={16} />}
-                            register={register("confirmPassword", {
-                                required: "Please confirm your password",
-                                validate: (val) =>
-                                    val === watch("password") || "Passwords do not match",
-                            })}
+                            register={register("confirmPassword")}
                             error={errors.confirmPassword?.message}
                         />
 

@@ -1,42 +1,67 @@
 import axiosInstance from "@/api/axios";
-import { useMutation, useQuery, type UseMutationOptions, type UseQueryOptions } from "@tanstack/react-query";
+import {
+    useMutation,
+    useQuery,
+    type UseMutationOptions,
+    type UseQueryOptions,
+} from "@tanstack/react-query";
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface ApiResponse<T = unknown> {
     success?: boolean;
     message?: string;
     data?: T;
-    error?: unknown;
+    error?: string;
     show_toast?: boolean;
 }
 
+type QueryOptions<T> = Omit<
+    UseQueryOptions<ApiResponse<T>>,
+    "queryKey" | "queryFn"
+>;
+
+type MutationOptions<TData, TVariables> = UseMutationOptions<
+    ApiResponse<TData>,
+    Error,
+    TVariables
+>;
+
+// ─── GET ────────────────────────────────────────────────────────────────────
+
 export const useGetApi = <
     TData,
-    TParams extends Record<string, any> = {}
+    TParams extends Record<string, unknown> = Record<string, unknown>
 >(
-    queryKey: string,
     url: string,
     params?: TParams,
-    options?: UseQueryOptions<ApiResponse<TData>>
+    options?: QueryOptions<TData> & { queryKey?: string }
 ) => {
+    const { queryKey, ...restOptions } = options ?? {};
+
+    const safeParams =
+        params && Object.keys(params).length > 0 ? params : undefined;
+
     return useQuery<ApiResponse<TData>>({
-        queryKey: [queryKey, params],
+        queryKey: queryKey ? [queryKey, safeParams] : [url, safeParams],
         queryFn: async () => {
-            const { data } = await axiosInstance.get<ApiResponse<TData>>(url, { params });
+            const { data } = await axiosInstance.get<ApiResponse<TData>>(url, {
+                params: safeParams,
+            });
             return data;
         },
-        ...options,
+        ...restOptions,
     });
 };
 
-export const usePostApi = <
-    TData,
-    TBody = unknown
->(
+// ─── POST ───────────────────────────────────────────────────────────────────
+
+export const usePostApi = <TData, TBody = unknown>(
     url: string,
-    options?: UseMutationOptions<ApiResponse<TData>, unknown, TBody>
+    options?: MutationOptions<TData, TBody>
 ) => {
-    return useMutation<ApiResponse<TData>, unknown, TBody>({
-        mutationFn: async (body: TBody) => {
+    return useMutation<ApiResponse<TData>, Error, TBody>({
+        mutationFn: async (body) => {
             const { data } = await axiosInstance.post<ApiResponse<TData>>(url, body);
             return data;
         },
@@ -44,71 +69,61 @@ export const usePostApi = <
     });
 };
 
-export const usePutApi = <
-    TData,
-    TBody = unknown
->(
+// ─── PUT ────────────────────────────────────────────────────────────────────
+
+export type WithOptionalId<TBody> = { id?: string | number; body: TBody };
+
+export const usePutApi = <TData, TBody = unknown>(
     url: string,
-    options?: UseMutationOptions<
-        ApiResponse<TData>,
-        unknown,
-        { id: string | number; body: TBody }
-    >
+    options?: MutationOptions<TData, WithOptionalId<TBody>>
 ) => {
-    return useMutation<
-        ApiResponse<TData>,
-        unknown,
-        { id: string | number; body: TBody }
-    >({
+    return useMutation<ApiResponse<TData>, Error, WithOptionalId<TBody>>({
         mutationFn: async ({ id, body }) => {
-            const { data } = await axiosInstance.put<ApiResponse<TData>>(
-                `${url}/${id}`,
-                body
-            );
+            const endpoint = id !== undefined ? `${url}/${id}` : url;
+            const { data } = await axiosInstance.put<ApiResponse<TData>>(endpoint, body);
             return data;
         },
         ...options,
     });
 };
 
-export const usePatchApi = <
-    TData,
-    TBody = unknown
->(
+// ─── PATCH ──────────────────────────────────────────────────────────────────
+
+export const usePatchApi = <TData, TBody = unknown>(
     url: string,
-    options?: UseMutationOptions<
-        ApiResponse<TData>,
-        unknown,
-        { id: string | number; body: TBody }
-    >
+    options?: MutationOptions<TData, WithOptionalId<TBody>>
 ) => {
-    return useMutation<
-        ApiResponse<TData>,
-        unknown,
-        { id: string | number; body: TBody }
-    >({
+    return useMutation<ApiResponse<TData>, Error, WithOptionalId<TBody>>({
         mutationFn: async ({ id, body }) => {
-            const { data } = await axiosInstance.patch<ApiResponse<TData>>(
-                `${url}/${id}`,
-                body
-            );
+            const endpoint = id !== undefined ? `${url}/${id}` : url;
+            const { data } = await axiosInstance.patch<ApiResponse<TData>>(endpoint, body);
             return data;
         },
         ...options,
     });
 };
+
+// ─── DELETE ─────────────────────────────────────────────────────────────────
+
+export type DeleteVars<TId extends string | number = string | number> =
+    | { id: TId; body?: unknown }
+    | TId;
 
 export const useDeleteApi = <
     TData,
     TId extends string | number = string | number
 >(
     url: string,
-    options?: UseMutationOptions<ApiResponse<TData>, unknown, TId>
+    options?: MutationOptions<TData, DeleteVars<TId>>
 ) => {
-    return useMutation<ApiResponse<TData>, unknown, TId>({
-        mutationFn: async (id: TId) => {
+    return useMutation<ApiResponse<TData>, Error, DeleteVars<TId>>({
+        mutationFn: async (vars) => {
+            const id = typeof vars === "object" && "id" in vars ? vars.id : vars;
+            const body =
+                typeof vars === "object" && "id" in vars ? vars.body : undefined;
             const { data } = await axiosInstance.delete<ApiResponse<TData>>(
-                `${url}/${id}`
+                `${url}/${id}`,
+                { data: body }
             );
             return data;
         },

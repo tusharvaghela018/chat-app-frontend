@@ -7,9 +7,10 @@ const Register = lazy(() => import("@/pages/auth/register"))
 const Home = lazy(() => import("@/pages/home"))
 const Dashboard = lazy(() => import("@/pages/dashboard"))
 const GoogleCallback = lazy(() => import('@/pages/auth/callback'))
+const GoogleError = lazy(() => import('@/pages/auth/error'))
 
 export type RoutesType = {
-    [key in 'HOME' | "LOGIN" | "REGISTER" | "DASHBOARD" | "DEFAULT" | "GOOGLE_CALLBACK"]: {
+    [key in 'HOME' | "LOGIN" | "REGISTER" | "DASHBOARD" | "DEFAULT" | "GOOGLE_CALLBACK" | 'GOOGLE_ERROR']: {
         path: string
         routeType: "public" | "authenticated" | "un-authenticated",
         element: RouteObject['element']
@@ -41,6 +42,11 @@ export const ROUTES: RoutesType = {
         path: "/auth/callback",
         routeType: "public",
         element: <GoogleCallback />
+    },
+    GOOGLE_ERROR: {
+        path: '/auth/error',
+        routeType: 'public',
+        element: <GoogleError />
     },
     DEFAULT: {
         path: "/",

@@ -39,9 +39,6 @@ axiosInstance.interceptors.response.use(
             case 500:
                 store.dispatch(addToast({ message, type: "error" }));
                 break;
-
-            default:
-                store.dispatch(addToast({ message, type: "error" }));
         }
 
         return Promise.reject(error);
