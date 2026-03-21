@@ -33,6 +33,7 @@ const authSlice = createSlice(
 
             clearAuth: (state) => {
                 state.token = null
+                state.user = null
             }
         }
     }
