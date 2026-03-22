@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import type { UseFormRegisterReturn } from "react-hook-form";
+import Button from "@/common/Button";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string;
@@ -65,14 +66,14 @@ const Input: React.FC<InputProps> = ({
                 />
 
                 {isPassword ? (
-                    <button
+                    <Button
                         type="button"
                         disabled={isDisabled}
                         className="absolute right-3 text-gray-500"
                         onClick={() => setShowPassword(!showPassword)}
                     >
                         {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
-                    </button>
+                    </Button>
                 ) : (
                     rightIcon && (
                         <span className="absolute right-3 text-gray-400">

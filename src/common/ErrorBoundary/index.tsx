@@ -1,3 +1,4 @@
+import Button from "@/common/Button";
 import React, { Component, type ReactNode } from "react";
 
 interface Props {
@@ -39,12 +40,12 @@ class ErrorBoundary extends Component<Props, State> {
                             An unexpected error occurred. Please reload the page.
                         </p>
 
-                        <button
+                        <Button
                             onClick={this.handleReload}
                             className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition hover:bg-blue-700"
                         >
                             Reload Page
-                        </button>
+                        </Button>
                     </div>
                 </div>
             );

@@ -1,3 +1,4 @@
+import Button from "@/common/Button";
 import React from "react";
 
 interface ModalProps {
@@ -30,12 +31,12 @@ const Modal: React.FC<ModalProps> = ({
                         {title}
                     </h2>
 
-                    <button
+                    <Button
                         onClick={onClose}
                         className="text-gray-500 hover:text-black"
                     >
                         ✕
-                    </button>
+                    </Button>
 
                 </div>
 

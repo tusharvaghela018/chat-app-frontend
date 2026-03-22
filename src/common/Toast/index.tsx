@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { getToasts, removeToast, type Toast, type ToastType } from "@/redux/slices/toast.slice";
+import Button from "@/common/Button";
 
 // ─── Icons (inline SVG — no extra imports needed) ─────────────────────────────
 
@@ -209,7 +210,7 @@ const ToastItem = ({ toast, index }: { toast: Toast; index: number }) => {
                 </span>
 
                 {/* Close button */}
-                <button
+                <Button
                     onClick={(e) => { e.stopPropagation(); dismiss(); }}
                     style={{
                         background: "none",
@@ -230,7 +231,7 @@ const ToastItem = ({ toast, index }: { toast: Toast; index: number }) => {
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                         <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
-                </button>
+                </Button>
             </div>
 
             {/* Message */}

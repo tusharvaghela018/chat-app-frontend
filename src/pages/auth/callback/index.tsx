@@ -7,14 +7,10 @@ import { setToken, setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import useToast from "@/hooks/toast";
 import { useGetApi } from "@/hooks/api";
+import type { IUser } from "@/types";
 
-interface IUser {
-    user: {
-        id: number
-        name: string
-        avatar?: string
-        is_online?: boolean
-    }
+interface MeResponse {
+    user: IUser
 }
 
 const GoogleCallback = () => {
@@ -31,7 +27,7 @@ const GoogleCallback = () => {
     }
 
     // ── fetch /auth/me — only runs when token exists ──────────────────────
-    const { data: meData, isSuccess, isError } = useGetApi<IUser>(
+    const { data: meData, isSuccess, isError } = useGetApi<MeResponse>(
         "/auth/me",
         undefined,
         {

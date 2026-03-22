@@ -18,26 +18,46 @@ axiosInstance.interceptors.request.use((config) => {
 });
 
 axiosInstance.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        const showToast = response?.data?.show_toast;
+        const message = response?.data?.message;
+
+        if (showToast && message) {
+            store.dispatch(addToast({ message, type: "success" }));
+        }
+
+        return response;
+    },
     (error) => {
-        console.log("🔥 Interceptor Error:", error);
 
         const status = error.response?.status;
+        const showToast = error?.response?.data?.show_toast
         const message =
             error?.response?.data?.message || "Something went wrong";
 
         switch (status) {
+            case 400:
+                if (showToast) {
+                    store.dispatch(addToast({ message, type: "error" }));
+                }
+                break;
             case 401:
                 store.dispatch(clearAuth());
-                store.dispatch(addToast({ message, type: "error" }));
+                if (showToast) {
+                    store.dispatch(addToast({ message, type: "error" }));
+                }
                 break;
 
             case 403:
-                store.dispatch(addToast({ message, type: "error" }));
+                if (showToast) {
+                    store.dispatch(addToast({ message, type: "error" }));
+                }
                 break;
 
             case 500:
-                store.dispatch(addToast({ message, type: "error" }));
+                if (showToast) {
+                    store.dispatch(addToast({ message, type: "error" }));
+                }
                 break;
         }
 

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
+import Button from "@/common/Button";
 
 const NAV_LINKS = [
     { to: ROUTES.DASHBOARD.path, icon: <LayoutDashboard size={16} />, label: "Dashboard" },
@@ -211,9 +212,9 @@ export default function Navbar() {
                                         <span className="nb-drop-dot" /> Online
                                     </div>
                                 </div>
-                                <button className="nb-drop-item danger" onClick={logout}>
+                                <Button className="nb-drop-item danger" onClick={logout}>
                                     <LogOut size={14} /> Sign out
-                                </button>
+                                </Button>
                             </div>
                         )}
                     </div>

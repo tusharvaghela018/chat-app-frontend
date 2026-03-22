@@ -10,7 +10,6 @@ import Button from "@/common/Button";
 import { usePostApi } from "@/hooks/api";
 import { setToken, setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
-import useToast from "@/hooks/toast";
 import axios from "axios";
 
 interface LoginForm {
@@ -37,7 +36,6 @@ const loginSchema = yup.object({
 const Login = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
-    const toast = useToast()
 
     const {
         register,
@@ -63,9 +61,6 @@ const Login = () => {
                     is_online: is_online || false
                 }
                 dispatch(setUser(userData))
-                if (response.show_toast && response.message) {
-                    toast.success(response.message)
-                }
                 navigate(ROUTES.DASHBOARD.path);
             },
             onError: (error) => {
@@ -136,7 +131,7 @@ const Login = () => {
                     </div>
 
                     {/* Google Button */}
-                    <button
+                    <Button
                         onClick={handleGoogleLogin}
                         type="button"
                         className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
@@ -148,7 +143,7 @@ const Login = () => {
                             <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.6l6.2 5.2C37 38.2 44 33 44 24c0-1.3-.1-2.7-.4-3.9z" />
                         </svg>
                         Continue with Google
-                    </button>
+                    </Button>
 
                     <p className="text-center text-sm text-gray-500 mt-6">
                         Don't have an account?{" "}

@@ -160,10 +160,10 @@ const Register = () => {
                     </div>
 
                     {/* Google Button */}
-                    <button
+                    <Button
                         onClick={handleGoogleLogin}
                         type="button"
-                        className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                        className="text-black!! w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
                     >
                         <svg width="18" height="18" viewBox="0 0 48 48">
                             <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.7 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.9z" />
@@ -172,7 +172,7 @@ const Register = () => {
                             <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.6l6.2 5.2C37 38.2 44 33 44 24c0-1.3-.1-2.7-.4-3.9z" />
                         </svg>
                         Continue with Google
-                    </button>
+                    </Button>
 
                     <p className="text-center text-sm text-gray-500 mt-6">
                         Already have an account?{" "}
