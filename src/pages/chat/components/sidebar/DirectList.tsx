@@ -3,6 +3,7 @@ import { User, Search } from "lucide-react"
 import { useGetApi } from "@/hooks/api"
 import useDebounce from "@/hooks/debounce"
 import type { IUser } from "@/types"
+import Input from "@/common/Input"
 
 export interface UserResponse {
     users: IUser[]
@@ -67,7 +68,7 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
             <div className="p-3 border-b">
                 <div className="relative">
                     <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
+                    <Input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Search users..."

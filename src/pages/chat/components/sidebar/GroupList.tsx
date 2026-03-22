@@ -3,6 +3,10 @@ import { Users, Plus, Search } from "lucide-react"
 import { useGetApi } from "@/hooks/api"
 import useDebounce from "@/hooks/debounce"
 import type { IGroup } from "@/types"
+import { useSocket } from "@/hooks/socket"
+import { useQueryClient } from "@tanstack/react-query"
+import { GROUP_EVENTS } from "@/pages/chat/constants"
+import Input from "@/common/Input"
 
 export interface GroupResponse {
     groups: IGroup[]
@@ -24,6 +28,10 @@ const GroupList = ({ selectedGroupId, onSelectGroup, onCreateGroup }: Props) => 
     const [page, setPage] = useState(1)
     const [groupList, setGroupList] = useState<IGroup[]>([])
     const bottomRef = useRef<HTMLDivElement>(null)
+
+    const socket = useSocket()
+    const queryClient = useQueryClient()
+
 
     const debouncedSearch = useDebounce(search, 400)
 
@@ -62,6 +70,27 @@ const GroupList = ({ selectedGroupId, onSelectGroup, onCreateGroup }: Props) => 
         return () => observer.disconnect()
     }, [handleObserver])
 
+    // listen for member changes and refetch group list
+    useEffect(() => {
+        if (!socket) return
+
+        const handleMemberJoined = () => {
+            queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
+        }
+
+        const handleMemberLeft = () => {
+            queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
+        }
+
+        socket.on(GROUP_EVENTS.MEMBER_JOINED, handleMemberJoined)
+        socket.on(GROUP_EVENTS.MEMBER_LEFT, handleMemberLeft)
+
+        return () => {
+            socket.off(GROUP_EVENTS.MEMBER_JOINED, handleMemberJoined)
+            socket.off(GROUP_EVENTS.MEMBER_LEFT, handleMemberLeft)
+        }
+    }, [socket])
+
     return (
         <div className="flex flex-col h-full">
 
@@ -80,7 +109,7 @@ const GroupList = ({ selectedGroupId, onSelectGroup, onCreateGroup }: Props) => 
             <div className="p-3 border-b flex-shrink-0">
                 <div className="relative">
                     <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
+                    <Input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Search groups..."

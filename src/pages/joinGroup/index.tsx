@@ -3,6 +3,7 @@ import { usePostApi } from "@/hooks/api"
 import { Users } from "lucide-react"
 import { ROUTES } from "@/constants/routes"
 import type { IGroup, IJoinGroupRequest } from "@/types"
+import Button from "@/common/Button"
 
 interface JoinGroupResponse {
     group?: IGroup
@@ -105,7 +106,7 @@ const JoinGroupPage = () => {
                     </p>
                 </div>
 
-                <button
+                <Button
                     onClick={handleJoin}
                     disabled={isPending}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 text-sm font-medium transition disabled:opacity-40 flex items-center justify-center gap-2"
@@ -114,7 +115,7 @@ const JoinGroupPage = () => {
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     )}
                     {isPending ? "Joining..." : "Join group"}
-                </button>
+                </Button>
 
                 <button
                     onClick={() => navigate(ROUTES.CHAT.path)}

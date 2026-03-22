@@ -7,6 +7,7 @@ import { useChat } from "@/pages/chat/hooks"
 import { getUser } from "@/redux/slices/auth.slice"
 import type { IUser } from "@/types"
 import Button from "@/common/Button"
+import Input from "@/common/Input"
 
 interface IMessage {
     id: number
@@ -174,7 +175,7 @@ const DirectChat = ({ user }: Props) => {
 
             {/* input */}
             <div className="p-4 bg-white border-t flex-shrink-0 flex gap-2">
-                <input
+                <Input
                     value={input}
                     onChange={(e) => handleTyping(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSend()}

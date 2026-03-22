@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import { Socket } from "socket.io-client"
 import { CHAT_EVENTS } from "@/pages/chat/constants"
+import { GROUP_EVENTS } from "@/pages/chat/constants"
+
 
 interface IMessage {
     id: number
@@ -118,6 +120,142 @@ export const useChat = ({
         activeConvRef,
         sendMessage,
         emitMarkSeen,
+        emitTypingStart,
+        emitTypingStop,
+    }
+}
+
+export interface IGroupMessage {
+    id: number
+    group_id: number
+    sender_id: number | null
+    content: string
+    type: "text" | "system"
+    created_at: string
+    sender?: {
+        id: number
+        name: string
+        avatar: string | null
+    }
+}
+
+interface TypingUser {
+    senderId: number
+    senderName: string
+}
+
+interface UseGroupChatProps {
+    socket: Socket | null
+    groupId: number
+    onMemberJoined?: () => void
+    onMemberLeft?: () => void
+}
+
+export const useGroupChat = ({ socket, groupId, onMemberJoined, onMemberLeft }: UseGroupChatProps) => {
+    const [messages, setMessages] = useState<IGroupMessage[]>([])
+    const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
+    const typingTimeoutRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
+
+    // ── listen for incoming messages ──────────────────────────────────────
+    useEffect(() => {
+        if (!socket) return
+
+        const handleReceiveMessage = (message: IGroupMessage) => {
+            if (message.group_id !== groupId) return
+            setMessages((prev) => [...prev, message])
+        }
+
+        const handleTyping = ({
+            senderId,
+            senderName,
+            isTyping,
+        }: {
+            senderId: number
+            senderName: string
+            isTyping: boolean
+            groupId: number
+        }) => {
+            if (isTyping) {
+                setTypingUsers((prev) => {
+                    if (prev.find((u) => u.senderId === senderId)) return prev
+                    return [...prev, { senderId, senderName }]
+                })
+
+                // auto clear after 3s incase TYPING_STOP is missed
+                if (typingTimeoutRef.current[senderId]) {
+                    clearTimeout(typingTimeoutRef.current[senderId])
+                }
+                typingTimeoutRef.current[senderId] = setTimeout(() => {
+                    setTypingUsers((prev) => prev.filter((u) => u.senderId !== senderId))
+                }, 3000)
+            } else {
+                if (typingTimeoutRef.current[senderId]) {
+                    clearTimeout(typingTimeoutRef.current[senderId])
+                }
+                setTypingUsers((prev) => prev.filter((u) => u.senderId !== senderId))
+            }
+        }
+
+        // ← add these two
+        const handleMemberJoined = ({ groupId: joinedGroupId }: { groupId: number }) => {
+            console.log("MEMBER_JOINED received", joinedGroupId, groupId)
+            if (joinedGroupId !== groupId) return
+            onMemberJoined?.()
+        }
+
+        const handleMemberLeft = ({ groupId: leftGroupId }: { groupId: number; userId: number }) => {
+            if (leftGroupId !== groupId) return
+            onMemberLeft?.()
+        }
+
+        socket.on(GROUP_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
+        socket.on(GROUP_EVENTS.TYPING, handleTyping)
+        socket.on(GROUP_EVENTS.MEMBER_JOINED, handleMemberJoined)
+        socket.on(GROUP_EVENTS.MEMBER_LEFT, handleMemberLeft)
+
+        return () => {
+            socket.off(GROUP_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
+            socket.off(GROUP_EVENTS.TYPING, handleTyping)
+            socket.off(GROUP_EVENTS.MEMBER_JOINED, handleMemberJoined)
+            socket.off(GROUP_EVENTS.MEMBER_LEFT, handleMemberLeft)
+        }
+    }, [socket, groupId])
+
+    // ── reset when group changes ──────────────────────────────────────────
+    useEffect(() => {
+        setMessages([])
+        setTypingUsers([])
+    }, [groupId])
+
+    // ── send message ──────────────────────────────────────────────────────
+    const sendMessage = (content: string) => {
+        if (!socket || !content.trim()) return
+        socket.emit(GROUP_EVENTS.SEND_MESSAGE, { groupId, content })
+    }
+
+    // ── mark seen ─────────────────────────────────────────────────────────
+    const markSeen = (messageIds: number[]) => {
+        if (!socket || messageIds.length === 0) return
+        socket.emit(GROUP_EVENTS.MARK_SEEN, { groupId, messageIds })
+    }
+
+    // ── typing ────────────────────────────────────────────────────────────
+    const emitTypingStart = () => {
+        if (!socket) return
+        socket.emit(GROUP_EVENTS.TYPING_START, { groupId })
+    }
+
+    const emitTypingStop = () => {
+        if (!socket) return
+        socket.emit(GROUP_EVENTS.TYPING_STOP, { groupId })
+    }
+
+    return {
+        messages,
+        setMessages,
+        typingUsers,
+        sendMessage,
+        markSeen,
         emitTypingStart,
         emitTypingStop,
     }

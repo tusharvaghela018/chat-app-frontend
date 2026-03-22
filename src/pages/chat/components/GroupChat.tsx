@@ -4,14 +4,17 @@ import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
 import { useGetApi, useDeleteApi, usePatchApi, usePostApi } from "@/hooks/api"
 import { getUser } from "@/redux/slices/auth.slice"
+import type { IGroup, IGroupMember, IUser } from "@/types"
+import Button from "@/common/Button"
 import SidebarPanel from "@/common/Sidebar"
 import ConfirmDialog from "@/common/confirmDialog"
 import AddMemberModal from "@/pages/chat/components/group/AddMemberModal"
 import GroupSettingsModal from "@/pages/chat/components/group/GroupSettingsModal"
 import EditGroupModal from "@/pages/chat/components/group/EditGroupModal"
 import JoinRequestsModal from "@/pages/chat/components/group/JoinRequestsModal"
-import type { IGroup, IGroupMember, IUser } from "@/types"
-import Button from "@/common/Button"
+import { useGroupChat, type IGroupMessage } from "@/pages/chat/hooks"
+import { useSocket } from "@/hooks/socket"
+import Input from "@/common/Input"
 
 interface Props {
     group: IGroup
@@ -108,7 +111,13 @@ const MemberMenu = ({
 }
 
 const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
-    const authUser = useSelector(getUser)
+    const authUser = useSelector(getUser);
+    const socket = useSocket();
+
+    const [input, setInput] = useState<string>("");
+    const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const bottomRef = useRef<HTMLDivElement>(null)
+
     const queryClient = useQueryClient()
 
     const [showInfo, setShowInfo] = useState(false)
@@ -123,6 +132,71 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
     const [copied, setCopied] = useState(false)
     const [showJoinRequests, setShowJoinRequests] = useState(false)
 
+    const {
+        messages,
+        setMessages,
+        typingUsers,
+        sendMessage,
+        markSeen,
+        emitTypingStart,
+        emitTypingStop,
+    } = useGroupChat({
+        socket,
+        groupId: group.id,
+        onMemberJoined: () => {
+            queryClient.invalidateQueries({ queryKey: [`group-${group.id}`] })
+            queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
+        },
+        onMemberLeft: () => {
+            queryClient.invalidateQueries({ queryKey: [`group-${group.id}`] })
+            queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
+        },
+    })
+
+    // ── load initial messages from API ────────────────────────────────────
+    const { data: messagesData } = useGetApi(
+        `/groups/${group.id}/messages`,
+        undefined,
+        { queryKey: `group-messages-${group.id}`, enabled: true }
+    )
+
+    useEffect(() => {
+        const msgs = (messagesData?.data as any)?.messages ?? []
+        if (msgs.length === 0) return
+        setMessages(msgs)
+
+        // mark all unseen messages as seen
+        const unseenIds = msgs
+            .filter((m: IGroupMessage) => m.sender_id !== authUser?.id)
+            .map((m: IGroupMessage) => m.id)
+        markSeen(unseenIds)
+    }, [messagesData])
+
+    // ── auto scroll ───────────────────────────────────────────────────────
+    useEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    }, [messages])
+
+    // ── typing ────────────────────────────────────────────────────────────
+    const handleTyping = (val: string) => {
+        setInput(val)
+        emitTypingStart()
+
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+        typingTimeoutRef.current = setTimeout(() => {
+            emitTypingStop()
+        }, 2000)
+    }
+
+    // ── send ──────────────────────────────────────────────────────────────
+    const handleSend = () => {
+        if (!input.trim()) return
+        sendMessage(input)
+        emitTypingStop()
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+        setInput("")
+    }
+
 
     const { data: liveData, isLoading } = useGetApi<{ group: IGroup }>(
         `/groups/${group.id}`,
@@ -136,7 +210,9 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
     const groupDetail = liveData?.data?.group as IGroup | undefined
 
     const liveGroup = liveData?.data?.group ?? group
-    const myRole = group.members?.[0]?.role
+    const myRole = liveGroup.members?.find(
+        (m: IGroupMember) => m.user?.id === authUser?.id
+    )?.role ?? group.members?.[0]?.role
     const isAdmin = myRole === "admin"
     const memberCount = group.member_count ?? 0
 
@@ -268,9 +344,104 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
             </div>
 
             {/* messages placeholder */}
-            <div className="flex-1 flex items-center justify-center">
-                <p className="text-gray-400 text-sm">Messages coming soon</p>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {messages.length === 0 && (
+                    <div className="flex items-center justify-center h-full">
+                        <p className="text-sm text-gray-400">No messages yet — say hello 👋</p>
+                    </div>
+                )}
+
+                {messages.map((msg: IGroupMessage) => {
+                    const isMine = msg.sender_id === authUser?.id
+                    const isSystem = msg.type === "system"
+
+                    // system message — centered
+                    if (isSystem) {
+                        return (
+                            <div key={msg.id} className="flex justify-center">
+                                <span className="text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                                    {msg.content}
+                                </span>
+                            </div>
+                        )
+                    }
+
+                    return (
+                        <div
+                            key={msg.id}
+                            className={`flex ${isMine ? "justify-end" : "justify-start"} gap-2`}
+                        >
+                            {/* sender avatar — only for others */}
+                            {!isMine && (
+                                <div className="w-7 h-7 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                                    {msg.sender?.avatar
+                                        ? <img src={msg.sender.avatar} className="w-7 h-7 rounded-full object-cover" />
+                                        : <Users size={12} className="text-purple-600" />
+                                    }
+                                </div>
+                            )}
+
+                            <div className={`max-w-xs`}>
+                                {/* sender name — only for others */}
+                                {!isMine && (
+                                    <p className="text-xs text-gray-400 mb-0.5 ml-1">
+                                        {msg.sender?.name}
+                                    </p>
+                                )}
+                                <div className={`px-4 py-2 rounded-2xl text-sm break-words
+                                    ${isMine
+                                        ? "bg-blue-600 text-white rounded-br-sm"
+                                        : "bg-white text-gray-800 rounded-bl-sm shadow-sm border"
+                                    }`}
+                                >
+                                    {msg.content}
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })}
+
+                {/* typing indicator */}
+                {typingUsers.length > 0 && (
+                    <div className="flex justify-start gap-2">
+                        <div className="px-4 py-2 bg-gray-100 rounded-2xl rounded-bl-sm">
+                            <p className="text-xs text-gray-400 italic animate-pulse">
+                                {typingUsers.length === 1
+                                    ? `${typingUsers[0].senderName} is typing...`
+                                    : `${typingUsers.length} people are typing...`
+                                }
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                <div ref={bottomRef} />
             </div>
+
+            {/* input */}
+            {/* input */}
+            {liveGroup.settings?.who_can_send === "admins" && !isAdmin ? (
+                <div className="p-4 bg-white border-t flex-shrink-0 flex items-center justify-center">
+                    <p className="text-sm text-gray-400">Only admins can send messages</p>
+                </div>
+            ) : (
+                <div className="p-4 bg-white border-t flex-shrink-0 flex gap-2">
+                    <Input
+                        value={input}
+                        onChange={(e) => handleTyping(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                        placeholder={`Message ${liveGroup.name}...`}
+                        className="flex-1 border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-400 transition"
+                    />
+                    <Button
+                        onClick={handleSend}
+                        disabled={!input.trim()}
+                        className="bg-blue-600 text-white px-5 rounded-xl disabled:opacity-40 hover:bg-blue-700 transition"
+                    >
+                        Send
+                    </Button>
+                </div>
+            )}
 
             {/* info sidebar */}
             <SidebarPanel
