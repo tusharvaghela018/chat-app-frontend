@@ -11,6 +11,8 @@ import { usePostApi } from "@/hooks/api";
 import { setToken, setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import axios from "axios";
+import ForgotPasswordModal from "./components/ForgotPasswordModal";
+import { useState } from "react";
 
 interface LoginForm {
     email: string;
@@ -36,6 +38,7 @@ const loginSchema = yup.object({
 const Login = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
 
     const {
         register,
@@ -118,10 +121,25 @@ const Login = () => {
                             error={errors.password?.message}
                         />
 
+                        <div className="flex justify-end">
+                            <Button
+                                type="button"
+                                onClick={() => setIsForgotModalOpen(true)}
+                                className="text-sm font-medium text-blue-600 hover:underline focus:outline-none"
+                            >
+                                Forgot password?
+                            </Button>
+                        </div>
+
                         <Button type="submit" fullWidth loading={isPending} className="mt-2">
                             Sign in
                         </Button>
                     </form>
+
+                    <ForgotPasswordModal
+                        open={isForgotModalOpen}
+                        onClose={() => setIsForgotModalOpen(false)}
+                    />
 
                     {/* Divider */}
                     <div className="flex items-center gap-3 my-5">

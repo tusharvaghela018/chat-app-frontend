@@ -10,9 +10,10 @@ const GoogleCallback = lazy(() => import('@/pages/auth/callback'))
 const GoogleError = lazy(() => import('@/pages/auth/error'))
 const ChatPage = lazy(() => import('@/pages/chat'))
 const JoinGroupPage = lazy(() => import('@/pages/joinGroup'))
+const ResetPassword = lazy(() => import('@/pages/auth/reset-password'))
 
 export type RoutesType = {
-    [key in 'HOME' | "LOGIN" | "REGISTER" | "DASHBOARD" | "DEFAULT" | "GOOGLE_CALLBACK" | 'GOOGLE_ERROR' | 'CHAT' | 'JOIN_GROUP_PAGE']: {
+    [key in 'HOME' | "LOGIN" | "REGISTER" | "DASHBOARD" | "DEFAULT" | "GOOGLE_CALLBACK" | 'GOOGLE_ERROR' | 'CHAT' | 'JOIN_GROUP_PAGE' | 'RESET_PASSWORD']: {
         path: string
         routeType: "public" | "authenticated" | "un-authenticated",
         element: RouteObject['element']
@@ -34,6 +35,16 @@ export const ROUTES: RoutesType = {
         path: "/register",
         routeType: "un-authenticated",
         element: <Register />
+    },
+    // FORGOT_PASSWORD: {
+    //     path: "/forgot-password",
+    //     routeType: "un-authenticated",
+    //     element: <Login /> // Forgot password is a modal on the login page
+    // },
+    RESET_PASSWORD: {
+        path: "/auth/reset-password",
+        routeType: "un-authenticated",
+        element: <ResetPassword />
     },
     DASHBOARD: {
         path: '/dashboard',
