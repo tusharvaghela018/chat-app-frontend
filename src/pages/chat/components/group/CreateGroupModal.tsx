@@ -1,11 +1,13 @@
+import { useRef, useState } from "react"
 import { useForm } from "react-hook-form"
+import { useQueryClient } from "@tanstack/react-query"
 import Modal from "@/common/Modal"
 import Input from "@/common/Input"
 import Button from "@/common/Button"
 import Select from "@/common/ReactSelect"
 import { usePostApi, useGetApi } from "@/hooks/api"
 import type { IGroup, IUser } from "@/types"
-import { useQueryClient } from "@tanstack/react-query"
+import { Camera, Users } from "lucide-react"
 
 interface FormValues {
     name: string
@@ -21,6 +23,10 @@ interface Props {
 }
 
 const CreateGroupModal = ({ open, onClose, onCreated }: Props) => {
+
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+    const [avatarFile, setAvatarFile] = useState<File | null>(null)
     const joinModeOptions = [
         { label: "Open — anyone with link joins instantly", value: "open" },
         { label: "Approval — admin must approve join requests", value: "approval" },
@@ -47,26 +53,35 @@ const CreateGroupModal = ({ open, onClose, onCreated }: Props) => {
         value: u.id,
     }))
 
+    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setAvatarFile(file)
+        setAvatarPreview(URL.createObjectURL(file))
+    }
+
     const { mutate: createGroup, isPending: isCreating } = usePostApi<{ group: IGroup }>("/groups")
 
+    // update onSubmit to use FormData
     const onSubmit = (values: FormValues) => {
-        createGroup(
-            {
-                name: values.name,
-                description: values.description,
-                member_ids: values.members.map((m) => m.value),
-                join_mode: values.join_mode.value
-            } as any,
-            {
-                onSuccess: (res) => {
-                    const group = res?.data?.group
-                    queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
-                    onCreated(group as IGroup)
-                    reset()
-                    onClose()
-                },
-            }
-        )
+        const formData = new FormData()
+        formData.append("name", values.name)
+        if (values.description) formData.append("description", values.description)
+        formData.append("join_mode", values.join_mode.value)
+        values.members.forEach((m) => formData.append("member_ids[]", String(m.value)))
+        if (avatarFile) formData.append("avatar", avatarFile)
+
+        createGroup(formData as any, {
+            onSuccess: (res) => {
+                const group = res?.data?.group
+                queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
+                onCreated(group as IGroup)
+                reset()
+                setAvatarPreview(null)
+                setAvatarFile(null)
+                onClose()
+            },
+        })
     }
 
     const handleClose = () => {
@@ -77,6 +92,31 @@ const CreateGroupModal = ({ open, onClose, onCreated }: Props) => {
     return (
         <Modal open={open} onClose={handleClose} title="Create group">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+
+                <div className="flex justify-center">
+                    <div className="relative">
+                        <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center overflow-hidden">
+                            {avatarPreview
+                                ? <img src={avatarPreview} className="w-20 h-20 object-cover" />
+                                : <Users size={32} className="text-purple-400" />
+                            }
+                        </div>
+                        <Button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="absolute bottom-0 right-0 w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center hover:bg-blue-700 transition"
+                        >
+                            <Camera size={13} className="text-white" />
+                        </Button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleAvatarChange}
+                            className="hidden"
+                        />
+                    </div>
+                </div>
 
                 <Input
                     label="Group name"

@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { useQueryClient } from "@tanstack/react-query"
 import Modal from "@/common/Modal"
@@ -7,6 +7,7 @@ import Button from "@/common/Button"
 import { usePatchApi } from "@/hooks/api"
 import type { IGroup } from "@/types"
 import Select from "@/common/ReactSelect"
+import { Camera, Users } from "lucide-react"
 
 interface FormValues {
     name: string
@@ -21,6 +22,9 @@ interface Props {
 }
 
 const EditGroupModal = ({ open, onClose, group }: Props) => {
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+    const [avatarFile, setAvatarFile] = useState<File | null>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
     const queryClient = useQueryClient()
 
     const joinModeOptions = [
@@ -52,28 +56,36 @@ const EditGroupModal = ({ open, onClose, group }: Props) => {
             description: group.description ?? "",
             join_mode: toJoinModeOption(group.join_mode),
         })
+        setAvatarPreview(null)
+        setAvatarFile(null)
     }, [group])
+
+    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setAvatarFile(file)
+        setAvatarPreview(URL.createObjectURL(file))
+    }
 
     const { mutate: updateGroup, isPending } = usePatchApi(`/groups/${group.id}`)
 
     const onSubmit = (values: FormValues) => {
-        updateGroup(
-            {
-                body: {
-                    name: values.name,
-                    description: values.description,
-                    join_mode: values.join_mode.value,  // ← add this
-                }
-            } as any,
-            {
-                onSuccess: () => {
-                    queryClient.invalidateQueries({ queryKey: [`group-${group.id}`] })
-                    queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
-                    onClose()
-                },
-            }
-        )
+        const formData = new FormData()
+        formData.append("name", values.name)
+        if (values.description) formData.append("description", values.description)
+        formData.append("join_mode", values.join_mode.value)
+        if (avatarFile) formData.append("avatar", avatarFile)
+
+        updateGroup({ body: formData } as any, {
+            onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: [`group-${group.id}`] })
+                queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
+                onClose()
+            },
+        })
     }
+
+    const currentAvatar = avatarPreview ?? group.avatar
 
     const handleClose = () => {
         reset()
@@ -83,6 +95,31 @@ const EditGroupModal = ({ open, onClose, group }: Props) => {
     return (
         <Modal open={open} onClose={handleClose} title="Edit group">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+
+                <div className="flex justify-center">
+                    <div className="relative">
+                        <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center overflow-hidden">
+                            {currentAvatar
+                                ? <img src={currentAvatar} className="w-20 h-20 object-cover" />
+                                : <Users size={32} className="text-purple-400" />
+                            }
+                        </div>
+                        <Button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="absolute bottom-0 right-0 w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center hover:bg-blue-700 transition"
+                        >
+                            <Camera size={13} className="text-white" />
+                        </Button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleAvatarChange}
+                            className="hidden"
+                        />
+                    </div>
+                </div>
 
                 <Input
                     label="Group name"
