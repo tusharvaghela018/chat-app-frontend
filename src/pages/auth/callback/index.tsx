@@ -31,6 +31,7 @@ const GoogleCallback = () => {
         "/auth/me",
         undefined,
         {
+            queryKey: 'get-me',
             enabled: !!token,   // only fires when token is present
             retry: false,       // don't retry on failure — just redirect to login
         }

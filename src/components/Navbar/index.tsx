@@ -1,14 +1,17 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
+import { useQueryClient } from "@tanstack/react-query";
 import {
     MessageSquare, LayoutDashboard, LogOut,
     ChevronDown, ShieldCheck, Bell,
-    Home
+    Home, Camera
 } from "lucide-react";
 import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import Button from "@/common/Button";
+import { usePatchApi } from "@/hooks/api";
+import type { IUser } from "@/types";
 
 const NAV_LINKS = [
     { to: ROUTES.DASHBOARD.path, icon: <LayoutDashboard size={16} />, label: "Dashboard" },
@@ -21,8 +24,12 @@ export default function Navbar() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const location = useLocation();
+    const queryClient = useQueryClient();
     const [open, setOpen] = useState(false);
     const dropRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const { mutate: updateProfile, isPending: isUpdating } = usePatchApi<IUser>("/users");
 
     /* close dropdown on outside click */
     useEffect(() => {
@@ -39,9 +46,42 @@ export default function Navbar() {
         navigate("/");
     };
 
-    const initials = user?.name
-        ? user.name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)
+    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !user?.id) return;
+
+        const formData = new FormData();
+        formData.append("avatar", file);
+
+        updateProfile({ body: formData as any }, {
+            onSuccess: (_) => {
+                // Invalidate query to trigger refetch of /auth/me
+                // use exact: false because useGetApi adds safeParams to the key
+                queryClient.invalidateQueries({
+                    queryKey: ['get-me'],
+                    exact: false,
+                    refetchType: 'all'
+                });
+            }
+        });
+    };
+
+    const nameParts = user?.name?.trim().split(/\s+/) || [];
+    const initials = nameParts.length > 0
+        ? (nameParts.length > 1
+            ? (nameParts[0][0] + nameParts[nameParts.length - 1][0])
+            : nameParts[0][0]
+        ).toUpperCase()
         : "U";
+
+    const [imgError, setImgError] = useState(false);
+
+    // Reset imgError when user changes
+    useEffect(() => {
+        setImgError(false);
+    }, [user?.avatar]);
+
+    const showAvatar = user?.avatar && user.avatar !== "null" && !imgError;
 
     return (
         <>
@@ -118,11 +158,15 @@ export default function Navbar() {
                 .nb-avatar-btn:hover { background: rgba(255,255,255,.09); }
                 .nb-avatar {
                     width: 30px; height: 30px; border-radius: 8px;
-                    background: linear-gradient(135deg,#4f8dff,#a78bfa);
+                    background: linear-gradient(135deg,#6366f1,#a855f7);
                     display: flex; align-items: center; justify-content: center;
                     font-size: .72rem; font-weight: 700; color: #fff;
                     font-family: 'Syne', sans-serif;
                     flex-shrink: 0;
+                    overflow: hidden;
+                }
+                .nb-avatar img {
+                    width: 100%; height: 100%; object-fit: cover;
                 }
                 .nb-name { font-size: .825rem; color: #f0f2f8; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
                 .nb-chevron { color: #6b7280; transition: transform .2s; }
@@ -164,6 +208,7 @@ export default function Navbar() {
                 }
                 .nb-drop-item:hover { background: rgba(255,255,255,.06); color: #f0f2f8; }
                 .nb-drop-item.danger:hover { background: rgba(239,68,68,.1); color: #f87171; }
+                .nb-drop-item.loading { opacity: 0.6; cursor: not-allowed; }
             `}</style>
 
             <nav className="nb">
@@ -199,7 +244,17 @@ export default function Navbar() {
                     {/* Avatar dropdown */}
                     <div className="nb-avatar-wrap" ref={dropRef}>
                         <div className="nb-avatar-btn" onClick={() => setOpen(p => !p)}>
-                            <div className="nb-avatar">{initials}</div>
+                            <div className="nb-avatar">
+                                {showAvatar ? (
+                                    <img
+                                        src={user.avatar}
+                                        alt={user.name}
+                                        onError={() => setImgError(true)}
+                                    />
+                                ) : (
+                                    initials
+                                )}
+                            </div>
                             <span className="nb-name">{user?.name ?? "User"}</span>
                             <ChevronDown size={13} className={`nb-chevron ${open ? "up" : ""}`} />
                         </div>
@@ -212,9 +267,23 @@ export default function Navbar() {
                                         <span className="nb-drop-dot" /> Online
                                     </div>
                                 </div>
+                                <button
+                                    className={`nb-drop-item ${isUpdating ? "loading" : ""}`}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUpdating}
+                                >
+                                    <Camera size={14} /> {isUpdating ? "Updating..." : "Change Avatar"}
+                                </button>
                                 <Button className="nb-drop-item danger" onClick={logout}>
                                     <LogOut size={14} /> Sign out
                                 </Button>
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    onChange={handleAvatarChange}
+                                    accept="image/*"
+                                    style={{ display: "none" }}
+                                />
                             </div>
                         )}
                     </div>
