@@ -300,11 +300,9 @@ export default function Home() {
                         <p className="text-sm text-muted-foreground">
                             © {new Date().getFullYear()} NexusApp · Built with Node.js, React & Socket.IO
                         </p>
-                        <div className="flex gap-6 text-sm font-medium text-muted-foreground">
-                            <a href="#" className="hover:text-primary transition-colors">Twitter</a>
-                            <a href="#" className="hover:text-primary transition-colors">GitHub</a>
-                            <a href="#" className="hover:text-primary transition-colors">Discord</a>
-                        </div>
+                        <p className="text-sm font-medium text-muted-foreground">
+                            Developed by <span className="text-primary font-semibold">Tushar Vaghela</span>
+                        </p>
                     </div>
                 </div>
             </footer>
