@@ -5,18 +5,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
     MessageSquare, LayoutDashboard, LogOut,
     ChevronDown, ShieldCheck, Bell,
-    Home, Camera
+    Home, Camera, Menu, X
 } from "lucide-react";
 import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
-import Button from "@/common/Button";
+import ThemeToggle from "@/common/ThemeToggle";
 import { usePatchApi } from "@/hooks/api";
 import type { IUser } from "@/types";
 
 const NAV_LINKS = [
-    { to: ROUTES.DASHBOARD.path, icon: <LayoutDashboard size={16} />, label: "Dashboard" },
-    { to: ROUTES.CHAT.path, icon: <MessageSquare size={16} />, label: "Messages" },
-    { to: ROUTES.HOME.path, icon: <Home size={16} />, label: 'Home' }
+    { to: ROUTES.HOME.path, icon: <Home size={18} />, label: 'Home' },
+    { to: ROUTES.DASHBOARD.path, icon: <LayoutDashboard size={18} />, label: "Dashboard" },
+    { to: ROUTES.CHAT.path, icon: <MessageSquare size={18} />, label: "Messages" },
 ];
 
 export default function Navbar() {
@@ -25,21 +25,28 @@ export default function Navbar() {
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
-    const [open, setOpen] = useState(false);
+    
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    
     const dropRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { mutate: updateProfile, isPending: isUpdating } = usePatchApi<IUser>("/users");
 
-    /* close dropdown on outside click */
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (dropRef.current && !dropRef.current.contains(e.target as Node))
-                setOpen(false);
+                setIsProfileOpen(false);
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
+
+    // Close mobile menu on route change
+    useEffect(() => {
+        setIsMenuOpen(false);
+    }, [location.pathname]);
 
     const logout = () => {
         dispatch(clearAuth());
@@ -54,9 +61,7 @@ export default function Navbar() {
         formData.append("avatar", file);
 
         updateProfile({ body: formData as any }, {
-            onSuccess: (_) => {
-                // Invalidate query to trigger refetch of /auth/me
-                // use exact: false because useGetApi adds safeParams to the key
+            onSuccess: () => {
                 queryClient.invalidateQueries({
                     queryKey: ['get-me'],
                     exact: false,
@@ -66,229 +71,142 @@ export default function Navbar() {
         });
     };
 
-    const nameParts = user?.name?.trim().split(/\s+/) || [];
-    const initials = nameParts.length > 0
-        ? (nameParts.length > 1
-            ? (nameParts[0][0] + nameParts[nameParts.length - 1][0])
-            : nameParts[0][0]
-        ).toUpperCase()
+    const initials = user?.name 
+        ? user.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
         : "U";
 
     const [imgError, setImgError] = useState(false);
-
-    // Reset imgError when user changes
-    useEffect(() => {
-        setImgError(false);
-    }, [user?.avatar]);
-
+    useEffect(() => setImgError(false), [user?.avatar]);
     const showAvatar = user?.avatar && user.avatar !== "null" && !imgError;
 
     return (
-        <>
-            <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap');
-
-                .nb {
-                    position: sticky; top: 0; z-index: 100;
-                    height: 60px;
-                    display: flex; align-items: center; justify-content: space-between;
-                    padding: 0 1.5rem;
-                    background: rgba(10,11,18,0.85);
-                    backdrop-filter: blur(20px);
-                    border-bottom: 1px solid rgba(255,255,255,0.07);
-                    font-family: 'DM Sans', sans-serif;
-                }
-
-                .nb-logo {
-                    display: flex; align-items: center; gap: 9px;
-                    font-family: 'Syne', sans-serif; font-size: 1.1rem;
-                    color: #f0f2f8; text-decoration: none;
-                }
-                .nb-logo-icon {
-                    width: 32px; height: 32px; border-radius: 9px;
-                    background: #4f8dff;
-                    display: flex; align-items: center; justify-content: center;
-                }
-
-                .nb-links {
-                    display: flex; align-items: center; gap: 4px;
-                    position: absolute; left: 50%; transform: translateX(-50%);
-                }
-                .nb-link {
-                    display: inline-flex; align-items: center; gap: 6px;
-                    padding: 6px 14px; border-radius: 8px;
-                    font-size: .875rem; color: #9ca3af;
-                    text-decoration: none;
-                    transition: color .15s, background .15s;
-                    border: 1px solid transparent;
-                }
-                .nb-link:hover  { color: #f0f2f8; background: rgba(255,255,255,.06); }
-                .nb-link.active {
-                    color: #4f8dff;
-                    background: rgba(79,141,255,.1);
-                    border-color: rgba(79,141,255,.2);
-                }
-
-                .nb-right { display: flex; align-items: center; gap: 10px; }
-
-                /* bell */
-                .nb-bell {
-                    width: 36px; height: 36px; border-radius: 9px;
-                    display: flex; align-items: center; justify-content: center;
-                    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07);
-                    color: #9ca3af; cursor: pointer; transition: color .15s, background .15s;
-                    position: relative;
-                }
-                .nb-bell:hover { color: #f0f2f8; background: rgba(255,255,255,.1); }
-                .nb-bell-dot {
-                    position: absolute; top: 7px; right: 8px;
-                    width: 6px; height: 6px; border-radius: 50%;
-                    background: #4f8dff; border: 1.5px solid #0a0b12;
-                }
-
-                /* avatar dropdown */
-                .nb-avatar-wrap { position: relative; }
-                .nb-avatar-btn {
-                    display: flex; align-items: center; gap: 8px;
-                    padding: 4px 10px 4px 4px; border-radius: 10px;
-                    border: 1px solid rgba(255,255,255,.07);
-                    background: rgba(255,255,255,.04);
-                    cursor: pointer; transition: background .15s;
-                }
-                .nb-avatar-btn:hover { background: rgba(255,255,255,.09); }
-                .nb-avatar {
-                    width: 30px; height: 30px; border-radius: 8px;
-                    background: linear-gradient(135deg,#6366f1,#a855f7);
-                    display: flex; align-items: center; justify-content: center;
-                    font-size: .72rem; font-weight: 700; color: #fff;
-                    font-family: 'Syne', sans-serif;
-                    flex-shrink: 0;
-                    overflow: hidden;
-                }
-                .nb-avatar img {
-                    width: 100%; height: 100%; object-fit: cover;
-                }
-                .nb-name { font-size: .825rem; color: #f0f2f8; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-                .nb-chevron { color: #6b7280; transition: transform .2s; }
-                .nb-chevron.up { transform: rotate(180deg); }
-
-                /* dropdown menu */
-                .nb-drop {
-                    position: absolute; top: calc(100% + 8px); right: 0;
-                    min-width: 180px;
-                    background: #0e1117; border: 1px solid rgba(255,255,255,.09);
-                    border-radius: 12px; padding: 6px;
-                    box-shadow: 0 20px 60px rgba(0,0,0,.6);
-                    animation: dropIn .15s ease;
-                }
-                @keyframes dropIn {
-                    from { opacity:0; transform: translateY(-6px); }
-                    to   { opacity:1; transform: translateY(0); }
-                }
-                .nb-drop-header {
-                    padding: 8px 10px 10px;
-                    border-bottom: 1px solid rgba(255,255,255,.06);
-                    margin-bottom: 6px;
-                }
-                .nb-drop-name { font-size: .85rem; color: #f0f2f8; font-weight: 500; }
-                .nb-drop-status {
-                    display: flex; align-items: center; gap: 5px;
-                    font-size: .72rem; color: #6b7280; margin-top: 2px;
-                }
-                .nb-drop-dot {
-                    width: 6px; height: 6px; border-radius: 50%; background: #10b981;
-                }
-                .nb-drop-item {
-                    display: flex; align-items: center; gap: 9px;
-                    padding: 8px 10px; border-radius: 8px;
-                    font-size: .83rem; color: #9ca3af; cursor: pointer;
-                    transition: background .12s, color .12s;
-                    border: none; background: transparent; width: 100%; text-align: left;
-                    font-family: 'DM Sans', sans-serif;
-                }
-                .nb-drop-item:hover { background: rgba(255,255,255,.06); color: #f0f2f8; }
-                .nb-drop-item.danger:hover { background: rgba(239,68,68,.1); color: #f87171; }
-                .nb-drop-item.loading { opacity: 0.6; cursor: not-allowed; }
-            `}</style>
-
-            <nav className="nb">
+        <nav className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
+            <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
                 {/* Logo */}
-                <Link to={ROUTES.DASHBOARD.path} className="nb-logo">
-                    <div className="nb-logo-icon">
-                        <ShieldCheck size={16} color="#fff" />
+                <Link to={ROUTES.HOME.path} className="flex items-center gap-2 transition-opacity hover:opacity-90">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+                        <ShieldCheck size={20} />
                     </div>
-                    NexusApp
+                    <span className="hidden font-display text-xl font-bold tracking-tight text-foreground sm:block">
+                        NexusApp
+                    </span>
                 </Link>
 
-                {/* Center nav links */}
-                <div className="nb-links">
-                    {NAV_LINKS.map(l => (
+                {/* Desktop Navigation */}
+                <div className="hidden items-center gap-1 md:flex">
+                    {NAV_LINKS.map((link) => (
                         <Link
-                            key={l.to}
-                            to={l.to}
-                            className={`nb-link ${location.pathname === l.to ? "active" : ""}`}
+                            key={link.to}
+                            to={link.to}
+                            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                                location.pathname === link.to
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                            }`}
                         >
-                            {l.icon} {l.label}
+                            {link.icon}
+                            {link.label}
                         </Link>
                     ))}
                 </div>
 
-                {/* Right side */}
-                <div className="nb-right">
-                    {/* Bell */}
-                    <div className="nb-bell">
-                        <Bell size={16} />
-                        <span className="nb-bell-dot" />
+                {/* Right Actions */}
+                <div className="flex items-center gap-2 sm:gap-4">
+                    <div className="hidden sm:block">
+                        <ThemeToggle />
                     </div>
+                    
+                    <button className="relative flex h-9 w-9 items-center justify-center rounded-lg border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+                        <Bell size={18} />
+                        <span className="absolute top-2 right-2 h-2 w-2 rounded-full border-2 border-background bg-primary" />
+                    </button>
 
-                    {/* Avatar dropdown */}
-                    <div className="nb-avatar-wrap" ref={dropRef}>
-                        <div className="nb-avatar-btn" onClick={() => setOpen(p => !p)}>
-                            <div className="nb-avatar">
+                    {/* Profile Dropdown */}
+                    <div className="relative" ref={dropRef}>
+                        <button
+                            onClick={() => setIsProfileOpen(!isProfileOpen)}
+                            className="flex items-center gap-2 rounded-xl border bg-background p-1 pr-3 transition-all hover:bg-accent"
+                        >
+                            <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-primary to-purple-600 font-display text-xs font-bold text-white shadow-inner">
                                 {showAvatar ? (
-                                    <img
-                                        src={user.avatar}
-                                        alt={user.name}
-                                        onError={() => setImgError(true)}
-                                    />
+                                    <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" onError={() => setImgError(true)} />
                                 ) : (
                                     initials
                                 )}
                             </div>
-                            <span className="nb-name">{user?.name ?? "User"}</span>
-                            <ChevronDown size={13} className={`nb-chevron ${open ? "up" : ""}`} />
-                        </div>
+                            <span className="hidden max-w-[100px] truncate text-sm font-medium text-foreground lg:block">
+                                {user?.name ?? "User"}
+                            </span>
+                            <ChevronDown size={14} className={`text-muted-foreground transition-transform duration-200 ${isProfileOpen ? "rotate-180" : ""}`} />
+                        </button>
 
-                        {open && (
-                            <div className="nb-drop">
-                                <div className="nb-drop-header">
-                                    <div className="nb-drop-name">{user?.name}</div>
-                                    <div className="nb-drop-status">
-                                        <span className="nb-drop-dot" /> Online
+                        {isProfileOpen && (
+                            <div className="absolute right-0 mt-2 w-56 origin-top-right rounded-2xl border bg-popover p-2 shadow-2xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
+                                <div className="px-3 py-3 border-b mb-1">
+                                    <p className="text-sm font-semibold text-foreground">{user?.name}</p>
+                                    <div className="mt-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                                        Online
                                     </div>
                                 </div>
+                                
                                 <button
-                                    className={`nb-drop-item ${isUpdating ? "loading" : ""}`}
+                                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={isUpdating}
                                 >
-                                    <Camera size={14} /> {isUpdating ? "Updating..." : "Change Avatar"}
+                                    <Camera size={16} />
+                                    {isUpdating ? "Updating..." : "Change Avatar"}
                                 </button>
-                                <Button className="nb-drop-item danger" onClick={logout}>
-                                    <LogOut size={14} /> Sign out
-                                </Button>
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    onChange={handleAvatarChange}
-                                    accept="image/*"
-                                    style={{ display: "none" }}
-                                />
+                                
+                                <div className="sm:hidden">
+                                    <ThemeToggle />
+                                </div>
+
+                                <button
+                                    onClick={logout}
+                                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
+                                >
+                                    <LogOut size={16} />
+                                    Sign out
+                                </button>
+                                
+                                <input type="file" ref={fileInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
                             </div>
                         )}
                     </div>
+
+                    {/* Mobile Menu Toggle */}
+                    <button
+                        onClick={() => setIsMenuOpen(!isMenuOpen)}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground md:hidden"
+                    >
+                        {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                    </button>
                 </div>
-            </nav>
-        </>
+            </div>
+
+            {/* Mobile Navigation */}
+            {isMenuOpen && (
+                <div className="border-t bg-background px-4 py-4 md:hidden animate-in slide-in-from-top-2 duration-200">
+                    <div className="flex flex-col gap-2">
+                        {NAV_LINKS.map((link) => (
+                            <Link
+                                key={link.to}
+                                to={link.to}
+                                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-base font-medium transition-all ${
+                                    location.pathname === link.to
+                                        ? "bg-primary text-primary-foreground"
+                                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                }`}
+                            >
+                                {link.icon}
+                                {link.label}
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </nav>
     );
 }

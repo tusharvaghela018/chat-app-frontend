@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Users, Plus, Search } from "lucide-react"
+import { Users, Search } from "lucide-react"
 import { useGetApi } from "@/hooks/api"
 import useDebounce from "@/hooks/debounce"
 import type { IGroup } from "@/types"
 import { useSocket } from "@/hooks/socket"
 import { useQueryClient } from "@tanstack/react-query"
 import { GROUP_EVENTS } from "@/pages/chat/constants"
-import Input from "@/common/Input"
 
 export interface GroupResponse {
     groups: IGroup[]
@@ -20,10 +19,9 @@ export interface GroupResponse {
 interface Props {
     selectedGroupId: number | null
     onSelectGroup: (group: IGroup) => void
-    onCreateGroup: () => void
 }
 
-const GroupList = ({ selectedGroupId, onSelectGroup, onCreateGroup }: Props) => {
+const GroupList = ({ selectedGroupId, onSelectGroup }: Props) => {
     const [search, setSearch] = useState("")
     const [page, setPage] = useState(1)
     const [groupList, setGroupList] = useState<IGroup[]>([])
@@ -31,7 +29,6 @@ const GroupList = ({ selectedGroupId, onSelectGroup, onCreateGroup }: Props) => 
 
     const socket = useSocket()
     const queryClient = useQueryClient()
-
 
     const debouncedSearch = useDebounce(search, 400)
 
@@ -92,71 +89,70 @@ const GroupList = ({ selectedGroupId, onSelectGroup, onCreateGroup }: Props) => 
     }, [socket])
 
     return (
-        <div className="flex flex-col h-full">
-
-            {/* create group button */}
-            <button
-                onClick={onCreateGroup}
-                className="w-full flex items-center gap-3 p-4 text-blue-600 hover:bg-blue-50 transition border-b flex-shrink-0"
-            >
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Plus size={18} />
-                </div>
-                <span className="text-sm font-medium">Create new group</span>
-            </button>
+        <div className="flex flex-col h-full bg-card">
 
             {/* search */}
-            <div className="p-3 border-b flex-shrink-0">
-                <div className="relative">
-                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <Input
+            <div className="px-4 pb-4">
+                <div className="relative group">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                    <input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Search groups..."
-                        className="w-full pl-9 pr-4 py-2 text-sm border rounded-lg outline-none focus:border-blue-400 transition"
+                        className="w-full pl-10 pr-4 py-2 text-sm bg-background border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
                     />
                 </div>
             </div>
 
             {/* list */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto px-2 custom-scrollbar">
 
                 {isFetching && groupList.length === 0 && <ListSkeleton />}
 
                 {!isFetching && groupList.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-40 gap-2">
-                        <Users size={32} className="text-gray-300" />
-                        <p className="text-sm text-gray-400">
-                            {search ? "No groups found" : "No groups yet"}
+                    <div className="flex flex-col items-center justify-center h-40 text-center px-4">
+                        <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-3 text-muted-foreground">
+                            <Users size={20} />
+                        </div>
+                        <p className="text-sm font-medium text-muted-foreground">
+                            {search ? "No groups found matching your search" : "No groups joined yet"}
                         </p>
                     </div>
                 )}
 
-                {groupList.map((group: IGroup) => (
-                    <div
-                        key={group.id}
-                        onClick={() => onSelectGroup(group)}
-                        className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 transition
-                            ${selectedGroupId === group.id ? "bg-blue-50 border-r-2 border-blue-500" : ""}`}
-                    >
-                        <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-                            {group.avatar
-                                ? <img src={group.avatar} className="w-10 h-10 rounded-full object-cover" />
-                                : <Users size={18} className="text-purple-600" />
-                            }
+                <div className="space-y-1">
+                    {groupList.map((group: IGroup) => (
+                        <div
+                            key={group.id}
+                            onClick={() => onSelectGroup(group)}
+                            className={`flex items-center gap-3 p-3 cursor-pointer rounded-2xl transition-all duration-200
+                                ${selectedGroupId === group.id 
+                                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]" 
+                                    : "hover:bg-muted text-foreground"}`}
+                        >
+                            <div className="flex-shrink-0">
+                                <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-display font-bold shadow-inner overflow-hidden
+                                    ${selectedGroupId === group.id ? "bg-white/20" : "bg-purple-500/10 text-purple-600"}`}>
+                                    {group.avatar
+                                        ? <img src={group.avatar} className="w-full h-full object-cover" />
+                                        : <Users size={20} />
+                                    }
+                                </div>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-bold truncate">{group.name}</p>
+                                <p className={`text-[10px] font-medium truncate
+                                    ${selectedGroupId === group.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                                    {group.description ?? "No description provided"}
+                                </p>
+                            </div>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{group.name}</p>
-                            <p className="text-xs text-gray-400 truncate">
-                                {group.description ?? "No description"}
-                            </p>
-                        </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
 
-                <div ref={bottomRef} className="py-3 flex justify-center">
+                <div ref={bottomRef} className="py-6 flex justify-center">
                     {isFetching && groupList.length > 0 && (
-                        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     )}
                 </div>
             </div>
@@ -165,13 +161,13 @@ const GroupList = ({ selectedGroupId, onSelectGroup, onCreateGroup }: Props) => 
 }
 
 const ListSkeleton = () => (
-    <div className="space-y-1 p-2">
-        {[...Array(4)].map((_, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-lg animate-pulse">
-                <div className="w-10 h-10 bg-gray-200 rounded-full flex-shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                    <div className="h-3 bg-gray-200 rounded w-2/3" />
-                    <div className="h-2.5 bg-gray-100 rounded w-1/2" />
+    <div className="space-y-2 px-2">
+        {[...Array(6)].map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-2xl animate-pulse bg-muted/50">
+                <div className="w-11 h-11 bg-muted rounded-xl flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                    <div className="h-3 bg-muted rounded w-3/4" />
+                    <div className="h-2 bg-muted rounded w-1/4" />
                 </div>
             </div>
         ))}

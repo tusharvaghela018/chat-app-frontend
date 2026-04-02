@@ -3,9 +3,11 @@ import type { PropsWithChildren } from "react"
 
 const Layout = ({ children }: PropsWithChildren) => {
     return (
-        <div>
+        <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
             <Navbar />
-            {children}
+            <main>
+                {children}
+            </main>
         </div>
     )
 }

@@ -1,13 +1,16 @@
 import { Providers } from '@/redux/provider'
 import '@/App.css'
 import Routes from '@/router'
+import { ThemeProvider } from '@/common/ThemeProvider'
 
 function App() {
 
     return (
-        <Providers>
-            <Routes />
-        </Providers>
+        <ThemeProvider>
+            <Providers>
+                <Routes />
+            </Providers>
+        </ThemeProvider>
     )
 }
 

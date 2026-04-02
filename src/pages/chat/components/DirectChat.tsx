@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef } from "react"
 import { useSelector } from "react-redux"
-import { User } from "lucide-react"
+import { User, Send, ChevronLeft, Phone, Video, MoreVertical, MessageSquare } from "lucide-react"
 import { useGetApi } from "@/hooks/api"
 import { useSocket } from "@/hooks/socket"
 import { useChat } from "@/pages/chat/hooks"
 import { getUser } from "@/redux/slices/auth.slice"
 import type { IUser } from "@/types"
 import Button from "@/common/Button"
-import Input from "@/common/Input"
 
 interface IMessage {
     id: number
@@ -20,9 +19,10 @@ interface IMessage {
 
 interface Props {
     user: IUser
+    onBack?: () => void
 }
 
-const DirectChat = ({ user }: Props) => {
+const DirectChat = ({ user, onBack }: Props) => {
     const authUser = useSelector(getUser)
     const socket = useSocket()
 
@@ -105,42 +105,67 @@ const DirectChat = ({ user }: Props) => {
     }
 
     return (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden bg-background">
 
             {/* header */}
-            <div className="h-16 bg-white border-b flex items-center px-6 flex-shrink-0 shadow-sm">
+            <div className="flex h-16 flex-shrink-0 items-center justify-between border-b bg-card px-4 shadow-sm sm:px-6">
                 <div className="flex items-center gap-3">
+                    {onBack && (
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={onBack} 
+                            className="mr-1 lg:hidden rounded-full"
+                        >
+                            <ChevronLeft size={24} />
+                        </Button>
+                    )}
                     <div className="relative">
-                        <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 font-display text-sm font-bold text-primary">
                             {user.avatar
-                                ? <img src={user.avatar} className="w-9 h-9 rounded-full object-cover" />
-                                : <User size={16} />
+                                ? <img src={user.avatar} className="h-full w-full rounded-xl object-cover" />
+                                : <User size={18} />
                             }
                         </div>
                         {user.is_online && (
-                            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
+                            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card bg-green-500" />
                         )}
                     </div>
-                    <div>
-                        <p className="font-semibold text-sm leading-tight">{user.name}</p>
-                        <p className="text-xs leading-tight">
+                    <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-foreground">{user.name}</p>
+                        <p className="text-[10px] font-medium uppercase tracking-wider">
                             {isTyping ? (
-                                <span className="text-blue-500 italic animate-pulse">typing...</span>
+                                <span className="text-primary animate-pulse">typing...</span>
                             ) : (
-                                <span className="text-gray-400">
+                                <span className={user.is_online ? "text-green-500" : "text-muted-foreground"}>
                                     {user.is_online ? "Online" : "Offline"}
                                 </span>
                             )}
                         </p>
                     </div>
                 </div>
+
+                <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="hidden sm:flex text-muted-foreground rounded-full">
+                        <Phone size={18} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="hidden sm:flex text-muted-foreground rounded-full">
+                        <Video size={18} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground rounded-full">
+                        <MoreVertical size={18} />
+                    </Button>
+                </div>
             </div>
 
             {/* messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50">
                 {messages.length === 0 && (
-                    <div className="flex items-center justify-center h-full">
-                        <p className="text-sm text-gray-400">No messages yet — say hello 👋</p>
+                    <div className="flex h-full flex-col items-center justify-center space-y-4">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                            <MessageSquare size={32} />
+                        </div>
+                        <p className="text-sm font-medium text-muted-foreground">No messages yet — say hello 👋</p>
                     </div>
                 )}
 
@@ -151,20 +176,25 @@ const DirectChat = ({ user }: Props) => {
                             key={msg.id}
                             className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                         >
-                            <div className={`px-4 py-2 rounded-2xl text-sm max-w-xs break-words
+                            <div className={`group relative px-4 py-2.5 text-sm max-w-[80%] sm:max-w-md break-words shadow-sm
                                 ${isMine
-                                    ? "bg-blue-600 text-white rounded-br-sm"
-                                    : "bg-white text-gray-800 rounded-bl-sm shadow-sm border"
+                                    ? "bg-primary text-primary-foreground rounded-2xl rounded-br-none"
+                                    : "bg-card text-foreground rounded-2xl rounded-bl-none border border-border"
                                 }`}
                             >
                                 {msg.content}
-                                {isMine && (
-                                    <span className={`block text-right text-[10px] mt-1
-                                        ${msg.is_seen ? "text-blue-200" : "text-blue-300 opacity-70"}`}
-                                    >
-                                        {msg.is_seen ? "✓✓ Seen" : "✓ Sent"}
+                                <div className={`flex items-center justify-end gap-1 mt-1 
+                                    ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                                >
+                                    <span className="text-[10px] tabular-nums">
+                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </span>
-                                )}
+                                    {isMine && (
+                                        <span className="text-[10px]">
+                                            {msg.is_seen ? "✓✓" : "✓"}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )
@@ -174,21 +204,23 @@ const DirectChat = ({ user }: Props) => {
             </div>
 
             {/* input */}
-            <div className="p-4 bg-white border-t flex-shrink-0 flex gap-2">
-                <Input
-                    value={input}
-                    onChange={(e) => handleTyping(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                    placeholder={`Message ${user.name}...`}
-                    className="flex-1 border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-400 transition"
-                />
-                <Button
-                    onClick={handleSend}
-                    disabled={!input.trim()}
-                    className="bg-blue-600 text-white px-5 rounded-xl disabled:opacity-40 hover:bg-blue-700 transition"
-                >
-                    Send
-                </Button>
+            <div className="border-t bg-card p-4 sm:px-6">
+                <div className="flex items-center gap-2 max-w-4xl mx-auto">
+                    <input
+                        value={input}
+                        onChange={(e) => handleTyping(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                        placeholder={`Message ${user.name}...`}
+                        className="flex-1 rounded-2xl border bg-background px-4 py-3 text-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
+                    />
+                    <Button
+                        onClick={handleSend}
+                        disabled={!input.trim()}
+                        className="h-11 w-11 shrink-0 rounded-2xl shadow-lg shadow-primary/20"
+                    >
+                        <Send size={18} />
+                    </Button>
+                </div>
             </div>
         </div>
     )

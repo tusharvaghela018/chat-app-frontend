@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy } from "lucide-react"
+import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy, Send, ChevronLeft } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
 import { useGetApi, useDeleteApi, usePatchApi, usePostApi } from "@/hooks/api"
@@ -14,12 +14,12 @@ import EditGroupModal from "@/pages/chat/components/group/EditGroupModal"
 import JoinRequestsModal from "@/pages/chat/components/group/JoinRequestsModal"
 import { useGroupChat, type IGroupMessage } from "@/pages/chat/hooks"
 import { useSocket } from "@/hooks/socket"
-import Input from "@/common/Input"
 
 interface Props {
     group: IGroup
     onGroupLeft: () => void
     onOpenDM: (user: IUser) => void
+    onBack?: () => void
 }
 
 // three dots menu for each member
@@ -55,54 +55,56 @@ const MemberMenu = ({
     return (
         <div className="relative" ref={ref}>
             <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setOpen((prev) => !prev)}
-                className="p-1 rounded text-gray-500 hover:text-gray-300 transition"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
             >
                 <MoreVertical size={14} />
             </Button>
 
             {open && (
-                <div className="absolute right-0 top-6 z-50 w-44 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+                <div className="absolute right-0 top-9 z-50 w-44 origin-top-right rounded-xl border bg-popover p-1 shadow-xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
 
                     {/* open DM */}
-                    <Button
+                    <button
                         onClick={() => { onDM(); setOpen(false) }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700 transition"
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-foreground transition-colors hover:bg-accent"
                     >
-                        <MessageSquare size={13} />
+                        <MessageSquare size={13} className="text-muted-foreground" />
                         Send message
-                    </Button>
+                    </button>
 
                     {/* make/remove admin — only admins see this */}
                     {isAdmin && (
                         member.role === "member" ? (
-                            <Button
+                            <button
                                 onClick={() => { onMakeAdmin(); setOpen(false) }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700 transition"
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-foreground transition-colors hover:bg-accent"
                             >
-                                <Shield size={13} />
+                                <Shield size={13} className="text-primary" />
                                 Make admin
-                            </Button>
+                            </button>
                         ) : (
-                            <Button
+                            <button
                                 onClick={() => { onRemoveAdmin(); setOpen(false) }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700 transition"
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-foreground transition-colors hover:bg-accent"
                             >
-                                <ShieldOff size={13} />
+                                <ShieldOff size={13} className="text-muted-foreground" />
                                 Remove as admin
-                            </Button>
+                            </button>
                         )
                     )}
 
                     {/* remove from group */}
                     {canRemove && (
-                        <Button
+                        <button
                             onClick={() => { onRemove(); setOpen(false) }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-gray-700 transition"
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-destructive transition-colors hover:bg-destructive/10"
                         >
                             <UserMinus size={13} />
                             Remove from group
-                        </Button>
+                        </button>
                     )}
                 </div>
             )}
@@ -110,7 +112,7 @@ const MemberMenu = ({
     )
 }
 
-const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
+const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
     const authUser = useSelector(getUser);
     const socket = useSocket();
 
@@ -198,7 +200,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
     }
 
 
-    const { data: liveData, isLoading } = useGetApi<{ group: IGroup }>(
+    const { data: liveData } = useGetApi<{ group: IGroup }>(
         `/groups/${group.id}`,
         undefined,
         {
@@ -315,39 +317,54 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
     }, [group.id])
 
     return (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden bg-background">
 
             {/* header */}
-            <div className="h-16 bg-white border-b flex items-center justify-between px-6 flex-shrink-0 shadow-sm">
+            <div className="h-16 flex-shrink-0 flex items-center justify-between border-b bg-card px-4 shadow-sm sm:px-6">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-purple-100 rounded-full flex items-center justify-center">
+                    {onBack && (
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={onBack} 
+                            className="mr-1 lg:hidden rounded-full"
+                        >
+                            <ChevronLeft size={24} />
+                        </Button>
+                    )}
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 text-purple-600 font-bold shadow-inner">
                         {group.avatar
-                            ? <img src={group.avatar} className="w-9 h-9 rounded-full object-cover" />
-                            : <Users size={16} className="text-purple-600" />
+                            ? <img src={group.avatar} className="h-full w-full rounded-xl object-cover" />
+                            : <Users size={20} />
                         }
                     </div>
-                    <div>
-                        <p className="font-semibold text-sm leading-tight">{liveGroup.name}</p>
-                        <p className="text-xs text-gray-400 leading-tight">
+                    <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-foreground">{liveGroup.name}</p>
+                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                             {memberCount} member{memberCount !== 1 ? "s" : ""}
                         </p>
                     </div>
                 </div>
 
                 <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setShowInfo((prev) => !prev)}
-                    className={`p-2 rounded-lg transition 
-                        ${showInfo ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:text-gray-600"}`}
+                    className={`rounded-full transition-all duration-200
+                        ${showInfo ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
                 >
                     <Info size={20} />
                 </Button>
             </div>
 
-            {/* messages placeholder */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* messages area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50">
                 {messages.length === 0 && (
-                    <div className="flex items-center justify-center h-full">
-                        <p className="text-sm text-gray-400">No messages yet — say hello 👋</p>
+                    <div className="flex h-full flex-col items-center justify-center space-y-4">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                            <MessageSquare size={32} />
+                        </div>
+                        <p className="text-sm font-medium text-muted-foreground">No messages yet — say hello 👋</p>
                     </div>
                 )}
 
@@ -355,11 +372,10 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
                     const isMine = msg.sender_id === authUser?.id
                     const isSystem = msg.type === "system"
 
-                    // system message — centered
                     if (isSystem) {
                         return (
-                            <div key={msg.id} className="flex justify-center">
-                                <span className="text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                            <div key={msg.id} className="flex justify-center my-2">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-muted px-4 py-1 rounded-full border border-border">
                                     {msg.content}
                                 </span>
                             </div>
@@ -371,30 +387,33 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
                             key={msg.id}
                             className={`flex ${isMine ? "justify-end" : "justify-start"} gap-2`}
                         >
-                            {/* sender avatar — only for others */}
                             {!isMine && (
-                                <div className="w-7 h-7 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-600 font-bold text-[10px] mt-1 shadow-inner overflow-hidden">
                                     {msg.sender?.avatar
-                                        ? <img src={msg.sender.avatar} className="w-7 h-7 rounded-full object-cover" />
-                                        : <Users size={12} className="text-purple-600" />
+                                        ? <img src={msg.sender.avatar} className="h-full w-full object-cover" />
+                                        : msg.sender?.name?.[0]?.toUpperCase()
                                     }
                                 </div>
                             )}
 
-                            <div className={`max-w-xs`}>
-                                {/* sender name — only for others */}
+                            <div className="max-w-[80%] sm:max-w-md">
                                 {!isMine && (
-                                    <p className="text-xs text-gray-400 mb-0.5 ml-1">
+                                    <p className="text-[10px] font-bold text-muted-foreground mb-1 ml-1 truncate">
                                         {msg.sender?.name}
                                     </p>
                                 )}
-                                <div className={`px-4 py-2 rounded-2xl text-sm break-words
+                                <div className={`relative px-4 py-2.5 rounded-2xl text-sm break-words shadow-sm
                                     ${isMine
-                                        ? "bg-blue-600 text-white rounded-br-sm"
-                                        : "bg-white text-gray-800 rounded-bl-sm shadow-sm border"
+                                        ? "bg-primary text-primary-foreground rounded-br-none"
+                                        : "bg-card text-foreground rounded-bl-none border border-border"
                                     }`}
                                 >
                                     {msg.content}
+                                    <div className={`text-[10px] tabular-nums mt-1 text-right 
+                                        ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                                    >
+                                        {new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -403,9 +422,9 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
 
                 {/* typing indicator */}
                 {typingUsers.length > 0 && (
-                    <div className="flex justify-start gap-2">
-                        <div className="px-4 py-2 bg-gray-100 rounded-2xl rounded-bl-sm">
-                            <p className="text-xs text-gray-400 italic animate-pulse">
+                    <div className="flex justify-start gap-2 animate-in slide-in-from-left-2">
+                        <div className="px-4 py-2 bg-muted rounded-2xl rounded-bl-none border border-border">
+                            <p className="text-xs font-medium text-primary animate-pulse italic">
                                 {typingUsers.length === 1
                                     ? `${typingUsers[0].senderName} is typing...`
                                     : `${typingUsers.length} people are typing...`
@@ -419,116 +438,110 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
             </div>
 
             {/* input */}
-            {/* input */}
-            {liveGroup.settings?.who_can_send === "admins" && !isAdmin ? (
-                <div className="p-4 bg-white border-t flex-shrink-0 flex items-center justify-center">
-                    <p className="text-sm text-gray-400">Only admins can send messages</p>
-                </div>
-            ) : (
-                <div className="p-4 bg-white border-t flex-shrink-0 flex gap-2">
-                    <Input
-                        value={input}
-                        onChange={(e) => handleTyping(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                        placeholder={`Message ${liveGroup.name}...`}
-                        className="flex-1 border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-400 transition"
-                    />
-                    <Button
-                        onClick={handleSend}
-                        disabled={!input.trim()}
-                        className="bg-blue-600 text-white px-5 rounded-xl disabled:opacity-40 hover:bg-blue-700 transition"
-                    >
-                        Send
-                    </Button>
-                </div>
-            )}
+            <div className="border-t bg-card p-4 sm:px-6">
+                {liveGroup.settings?.who_can_send === "admins" && !isAdmin ? (
+                    <div className="flex items-center justify-center p-2 bg-muted rounded-xl border border-dashed">
+                        <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                            <Shield size={14} /> Only admins can send messages
+                        </p>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2 max-w-4xl mx-auto">
+                        <input
+                            value={input}
+                            onChange={(e) => handleTyping(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                            placeholder={`Message ${liveGroup.name}...`}
+                            className="flex-1 rounded-2xl border bg-background px-4 py-3 text-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
+                        />
+                        <Button
+                            onClick={handleSend}
+                            disabled={!input.trim()}
+                            className="h-11 w-11 shrink-0 rounded-2xl shadow-lg shadow-primary/20"
+                        >
+                            <Send size={18} />
+                        </Button>
+                    </div>
+                )}
+            </div>
 
             {/* info sidebar */}
             <SidebarPanel
                 open={showInfo}
                 onClose={() => setShowInfo(false)}
                 position="right"
-                width="w-72"
-                title="Group info"
+                width="w-full sm:w-80"
+                title="Group Info"
             >
-                <div className="space-y-6">
-
-                    {/* ── about ─────────────────────────────────────────── */}
-                    <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs text-gray-400 uppercase tracking-wide">About</p>
-                            {canEditInfo && (
-                                <Button
-                                    onClick={() => setShowEditGroup(true)}
-                                    className="text-xs text-blue-400 hover:text-blue-300 transition"
-                                >
-                                    Edit
-                                </Button>
-                            )}
+                <div className="space-y-8 px-2">
+                    {/* ── header info ── */}
+                    <div className="flex flex-col items-center text-center">
+                        <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-purple-100 text-purple-600 font-bold text-3xl shadow-xl mb-4">
+                            {liveGroup.avatar
+                                ? <img src={liveGroup.avatar} className="h-full w-full rounded-3xl object-cover" />
+                                : <Users size={40} />
+                            }
                         </div>
-                        <p className="text-sm font-medium text-white">{liveGroup.name}</p>
-                        {liveGroup.description && (
-                            <p className="text-xs text-gray-400 mt-1">{liveGroup.description}</p>
-                        )}
+                        <h2 className="text-xl font-bold text-foreground">{liveGroup.name}</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Group · {memberCount} members</p>
                     </div>
 
-                    {/* ── members ───────────────────────────────────────── */}
+                    {/* ── description ── */}
                     <div>
                         <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs text-gray-400 uppercase tracking-wide">
-                                Members {groupDetail ? `(${groupDetail.members?.length})` : `(${memberCount})`}
+                            <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">About</h3>
+                            {canEditInfo && (
+                                <button onClick={() => setShowEditGroup(true)} className="text-xs font-bold text-primary hover:underline">Edit</button>
+                            )}
+                        </div>
+                        <div className="rounded-2xl border bg-muted/30 p-4">
+                            <p className="text-sm text-foreground leading-relaxed">
+                                {liveGroup.description || "No description provided."}
                             </p>
+                        </div>
+                    </div>
+
+                    {/* ── members list ── */}
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                                Members ({groupDetail?.members?.length || memberCount})
+                            </h3>
                             {canAddMembers && (
-                                <Button
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
                                     onClick={() => setShowAddMember(true)}
-                                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition"
+                                    className="h-7 px-3 rounded-lg text-xs"
                                 >
-                                    <UserPlus size={14} />
-                                    Add
+                                    <UserPlus size={12} className="mr-1.5" /> Add
                                 </Button>
                             )}
                         </div>
-
-                        {isLoading && (
-                            <div className="space-y-3">
-                                {[...Array(3)].map((_, i) => (
-                                    <div key={i} className="flex items-center gap-2 animate-pulse">
-                                        <div className="w-8 h-8 bg-gray-700 rounded-full flex-shrink-0" />
-                                        <div className="flex-1 space-y-1">
-                                            <div className="h-3 bg-gray-700 rounded w-2/3" />
-                                            <div className="h-2 bg-gray-700 rounded w-1/3" />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
 
                         <div className="space-y-1">
                             {groupDetail?.members?.map((m: IGroupMember) => (
-                                <div key={m.id} className="flex items-center gap-2 py-1.5 group/member">
+                                <div key={m.id} className="flex items-center gap-3 py-2 px-3 rounded-xl transition-colors hover:bg-muted/50 group/member">
                                     <div className="relative flex-shrink-0">
-                                        <div className="w-8 h-8 bg-purple-900 rounded-full flex items-center justify-center">
+                                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100 text-purple-600 font-bold text-xs shadow-inner">
                                             {m.user?.avatar
-                                                ? <img src={m.user.avatar} className="w-8 h-8 rounded-full object-cover" />
-                                                : <Users size={14} className="text-purple-300" />
+                                                ? <img src={m.user.avatar} className="h-full w-full rounded-xl object-cover" />
+                                                : m.user?.name?.[0]?.toUpperCase()
                                             }
                                         </div>
                                         {m.user?.is_online && (
-                                            <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border border-gray-900" />
+                                            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-green-500" />
                                         )}
                                     </div>
 
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium truncate text-white">
+                                        <p className="text-sm font-bold text-foreground truncate">
                                             {m.user?.name}
-                                            {m.user?.id === authUser?.id && (
-                                                <span className="text-gray-400 font-normal"> (you)</span>
-                                            )}
+                                            {m.user?.id === authUser?.id && <span className="font-normal text-muted-foreground"> (you)</span>}
                                         </p>
-                                        <p className="text-xs text-gray-400 capitalize">{m.role}</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{m.role}</p>
                                     </div>
 
-                                    {/* three dots — not for self */}
                                     {m.user?.id !== authUser?.id && (
                                         <MemberMenu
                                             member={m}
@@ -548,67 +561,50 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
                         </div>
                     </div>
 
-                    {/* ── invite link ───────────────────────────────────── */}
+                    {/* ── invite ── */}
                     {canShareLink && (
                         <div>
-                            <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Invite link</p>
-
-                            {!inviteLink ? (
-                                <button
-                                    onClick={handleGenerateLink}
-                                    disabled={isGenerating}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs text-gray-300 disabled:opacity-40"
+                             <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground mb-3">Invite Link</h3>
+                             {!inviteLink ? (
+                                <Button 
+                                    variant="secondary" 
+                                    fullWidth 
+                                    onClick={handleGenerateLink} 
+                                    loading={isGenerating}
+                                    className="rounded-xl h-10 text-xs font-bold"
                                 >
-                                    <Link2 size={13} />
-                                    {isGenerating ? "Generating..." : "Generate invite link"}
-                                </button>
-                            ) : (
+                                    <Link2 size={14} className="mr-2" /> Generate Link
+                                </Button>
+                             ) : (
                                 <div className="space-y-2">
-                                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800">
-                                        <p className="text-xs text-gray-300 truncate flex-1">{inviteLink}</p>
-                                        <button
-                                            onClick={handleCopy}
-                                            className="flex-shrink-0 text-gray-400 hover:text-white transition"
-                                            title="Copy link"
-                                        >
-                                            {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                    <div className="flex items-center gap-2 rounded-xl border bg-muted/50 p-2 pr-3">
+                                        <p className="flex-1 truncate text-xs font-medium pl-1">{inviteLink}</p>
+                                        <button onClick={handleCopy} className="text-muted-foreground hover:text-foreground">
+                                            {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                                         </button>
                                     </div>
-                                    <button
-                                        onClick={handleGenerateLink}
-                                        disabled={isGenerating}
-                                        className="text-xs text-gray-500 hover:text-gray-300 transition disabled:opacity-40"
-                                    >
-                                        Regenerate
-                                    </button>
+                                    <button onClick={handleGenerateLink} className="text-[10px] font-bold text-primary uppercase tracking-wider hover:underline px-1">Regenerate Link</button>
                                 </div>
-                            )}
+                             )}
                         </div>
                     )}
 
-                    {/* ── settings — admin only ──────────────────────────── */}
+                    {/* ── settings ── */}
                     {isAdmin && (
                         <div>
-                            <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs text-gray-400 uppercase tracking-wide">Settings</p>
-                                <Button
-                                    onClick={() => setShowSettings(true)}
-                                    className="text-xs text-blue-400 hover:text-blue-300 transition"
-                                >
-                                    Edit
-                                </Button>
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">Permissions</h3>
+                                <button onClick={() => setShowSettings(true)} className="text-xs font-bold text-primary hover:underline">Edit</button>
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-2">
                                 {[
-                                    { label: "Who can send messages", value: liveGroup.settings?.who_can_send },
-                                    { label: "Who can edit info", value: liveGroup.settings?.who_can_edit_info },
-                                    { label: "Who can add members", value: liveGroup.settings?.who_can_add_members },
-                                    { label: "Who can remove members", value: liveGroup.settings?.who_can_remove_members },
-                                    { label: "Who can share invite link", value: liveGroup.settings?.who_can_share_link },
+                                    { label: "Messaging", value: liveGroup.settings?.who_can_send },
+                                    { label: "Editing Info", value: liveGroup.settings?.who_can_edit_info },
+                                    { label: "Adding Members", value: liveGroup.settings?.who_can_add_members },
                                 ].map((s) => (
-                                    <div key={s.label} className="flex items-center justify-between py-1.5">
-                                        <p className="text-xs text-gray-400">{s.label}</p>
-                                        <span className="text-xs text-gray-300 capitalize bg-gray-700 px-2 py-0.5 rounded">
+                                    <div key={s.label} className="flex items-center justify-between rounded-xl border border-dashed p-3">
+                                        <p className="text-xs font-medium text-muted-foreground">{s.label}</p>
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/20">
                                             {s.value}
                                         </span>
                                     </div>
@@ -617,134 +613,58 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM }: Props) => {
                         </div>
                     )}
 
-                    {/* ── danger zone ────────────────────────────────────── */}
-                    <div>
-                        <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Actions</p>
-                        <div className="space-y-1">
-
+                    {/* ── danger zone ── */}
+                    <div className="pt-4 border-t">
+                         <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-destructive mb-3">Danger Zone</h3>
+                         <div className="space-y-2">
                             {isAdmin && liveGroup.join_mode === "approval" && (
                                 <Button
+                                    variant="ghost"
+                                    fullWidth
                                     onClick={() => setShowJoinRequests(true)}
-                                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-blue-600 hover:bg-gray-100 transition text-sm"
+                                    className="justify-between rounded-xl h-11 px-4 text-primary hover:bg-primary/5 border border-primary/20"
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <Users size={15} />
-                                        Join requests
-                                    </div>
+                                    <span className="flex items-center gap-2 font-bold text-sm"><Users size={16} /> Join Requests</span>
                                     <ChevronRight size={14} />
                                 </Button>
                             )}
 
                             <Button
+                                variant="ghost"
+                                fullWidth
                                 onClick={() => setShowLeaveConfirm(true)}
-                                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-orange-400 hover:bg-gray-800 transition text-sm"
+                                className="justify-between rounded-xl h-11 px-4 text-amber-600 hover:bg-amber-50 border border-amber-200"
                             >
-                                <div className="flex items-center gap-2">
-                                    <LogOut size={15} />
-                                    Leave group
-                                </div>
+                                <span className="flex items-center gap-2 font-bold text-sm"><LogOut size={16} /> Leave Group</span>
                                 <ChevronRight size={14} />
                             </Button>
 
                             {isAdmin && (
                                 <Button
+                                    variant="ghost"
+                                    fullWidth
                                     onClick={() => setShowDeleteConfirm(true)}
-                                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-red-400 hover:bg-gray-800 transition text-sm"
+                                    className="justify-between rounded-xl h-11 px-4 text-destructive hover:bg-destructive/5 border border-destructive/20"
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <Trash2 size={15} />
-                                        Delete group
-                                    </div>
+                                    <span className="flex items-center gap-2 font-bold text-sm"><Trash2 size={16} /> Delete Group</span>
                                     <ChevronRight size={14} />
                                 </Button>
                             )}
-
-                        </div>
+                         </div>
                     </div>
-
                 </div>
             </SidebarPanel>
 
-            {/* leave confirm */}
-            <ConfirmDialog
-                open={showLeaveConfirm}
-                onClose={() => setShowLeaveConfirm(false)}
-                onConfirm={handleLeaveConfirm}
-                title="Leave group"
-                message={`Are you sure you want to leave "${liveGroup.name}"?`}
-                confirmText="Leave"
-                variant="warning"
-                isLoading={isLeaving}
-            />
+            {/* Dialogs... (keep existing logic but update styling if needed) */}
+            <ConfirmDialog open={showLeaveConfirm} onClose={() => setShowLeaveConfirm(false)} onConfirm={handleLeaveConfirm} title="Leave Group" message={`Are you sure you want to leave "${liveGroup.name}"?`} confirmText="Leave Group" variant="warning" isLoading={isLeaving} />
+            <ConfirmDialog open={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} onConfirm={handleDeleteConfirm} title="Delete Group" message={`Are you sure you want to delete "${liveGroup.name}"? This action is permanent.`} confirmText="Delete Group" variant="danger" isLoading={isDeleting} />
+            <ConfirmDialog open={!!memberToRemove} onClose={() => setMemberToRemove(null)} onConfirm={handleRemoveConfirm} title="Remove Member" message={`Remove ${memberToRemove?.user?.name} from the group?`} confirmText="Remove" variant="danger" isLoading={isRemoving} />
+            <ConfirmDialog open={!!memberToUpdateRole} onClose={() => setMemberToUpdateRole(null)} onConfirm={handleRoleConfirm} title={memberToUpdateRole?.newRole === "admin" ? "Make Admin" : "Remove Admin"} message={memberToUpdateRole?.newRole === "admin" ? `Promote ${memberToUpdateRole?.member.user?.name} to admin?` : `Remove admin rights for ${memberToUpdateRole?.member.user?.name}?`} confirmText="Confirm" variant="info" isLoading={isUpdatingRole} />
 
-            {/* delete confirm */}
-            <ConfirmDialog
-                open={showDeleteConfirm}
-                onClose={() => setShowDeleteConfirm(false)}
-                onConfirm={handleDeleteConfirm}
-                title="Delete group"
-                message={`Are you sure you want to delete "${liveGroup.name}"? This cannot be undone.`}
-                confirmText="Delete"
-                variant="danger"
-                isLoading={isDeleting}
-            />
-
-            {/* remove member confirm */}
-            <ConfirmDialog
-                open={!!memberToRemove}
-                onClose={() => setMemberToRemove(null)}
-                onConfirm={handleRemoveConfirm}
-                title="Remove member"
-                message={`Are you sure you want to remove ${memberToRemove?.user?.name} from the group?`}
-                confirmText="Remove"
-                variant="danger"
-                isLoading={isRemoving}
-            />
-
-            {/* update role confirm */}
-            <ConfirmDialog
-                open={!!memberToUpdateRole}
-                onClose={() => setMemberToUpdateRole(null)}
-                onConfirm={handleRoleConfirm}
-                title={memberToUpdateRole?.newRole === "admin" ? "Make admin" : "Remove as admin"}
-                message={
-                    memberToUpdateRole?.newRole === "admin"
-                        ? `Make ${memberToUpdateRole?.member.user?.name} an admin?`
-                        : `Remove ${memberToUpdateRole?.member.user?.name} as admin?`
-                }
-                confirmText={memberToUpdateRole?.newRole === "admin" ? "Make admin" : "Remove admin"}
-                variant="info"
-                isLoading={isUpdatingRole}
-            />
-
-            {/* add member modal */}
-            <AddMemberModal
-                open={showAddMember}
-                onClose={() => setShowAddMember(false)}
-                groupId={group.id}
-            />
-
-            {/* settings model */}
-            {liveGroup.settings && (
-                <GroupSettingsModal
-                    open={showSettings}
-                    onClose={() => setShowSettings(false)}
-                    groupId={group.id}
-                    settings={liveGroup.settings}
-                />
-            )}
-
-            <EditGroupModal
-                open={showEditGroup}
-                onClose={() => setShowEditGroup(false)}
-                group={liveGroup}
-            />
-
-            <JoinRequestsModal
-                open={showJoinRequests}
-                onClose={() => setShowJoinRequests(false)}
-                groupId={group.id}
-            />
+            <AddMemberModal open={showAddMember} onClose={() => setShowAddMember(false)} groupId={group.id} />
+            {liveGroup.settings && <GroupSettingsModal open={showSettings} onClose={() => setShowSettings(false)} groupId={group.id} settings={liveGroup.settings} />}
+            <EditGroupModal open={showEditGroup} onClose={() => setShowEditGroup(false)} group={liveGroup} />
+            <JoinRequestsModal open={showJoinRequests} onClose={() => setShowJoinRequests(false)} groupId={group.id} />
         </div>
     )
 }

@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import {
     ShieldCheck, Zap, Lock, MessageSquare, Users,
     CreditCard, Bot, ArrowRight, Sparkles, Globe,
-    BarChart3, Bell, Video, FileText, Layers
+    Video, LayoutDashboard
 } from "lucide-react";
 
 import { getToken } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
+import Button from "@/common/Button";
+import { useGetApi } from "@/hooks/api";
 
 /* ─── Animated number counter ─── */
 const Counter = ({ to, suffix = "" }: { to: number; suffix?: string }) => {
@@ -20,7 +22,7 @@ const Counter = ({ to, suffix = "" }: { to: number; suffix?: string }) => {
             if (!entry.isIntersecting) return;
             observer.disconnect();
             let start = 0;
-            const step = Math.ceil(to / 60);
+            const step = Math.max(1, Math.ceil(to / 60));
             const timer = setInterval(() => {
                 start += step;
                 if (start >= to) { setCount(to); clearInterval(timer); }
@@ -34,11 +36,6 @@ const Counter = ({ to, suffix = "" }: { to: number; suffix?: string }) => {
     return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
 };
 
-/* ─── Floating particle dot ─── */
-const Dot = ({ style }: { style: React.CSSProperties }) => (
-    <span className="particle-dot" style={style} />
-);
-
 const STACK = [
     { icon: <Lock size={15} />, label: "JWT Auth" },
     { icon: <ShieldCheck size={15} />, label: "Google OAuth 2.0" },
@@ -49,80 +46,54 @@ const STACK = [
 ];
 
 const DONE = [
-    { icon: <Lock size={16} />, label: "JWT Authentication", done: true },
-    { icon: <Globe size={16} />, label: "Google OAuth 2.0", done: true },
-    { icon: <MessageSquare size={16} />, label: "Real-time Chat (1:1)", done: true },
-    { icon: <ShieldCheck size={16} />, label: "Seen / Delivered Receipts", done: true },
+    { icon: <Lock size={16} />, label: "JWT Authentication" },
+    { icon: <Globe size={16} />, label: "Google OAuth 2.0" },
+    { icon: <MessageSquare size={16} />, label: "Real-time Chat (1:1)" },
+    { icon: <Users size={16} />, label: "Group Messaging" },
+    { icon: <ShieldCheck size={16} />, label: "Seen / Delivered Receipts" },
 ];
 
 const ROADMAP = [
     {
-        icon: <Users size={18} />,
-        label: "Group Chat",
-        desc: "Rooms, admin controls, invite links, typing indicators for multiple users.",
-        color: "#6366f1",
-        tag: "Next up",
-    },
-    {
         icon: <CreditCard size={18} />,
         label: "Payments Module",
         desc: "Stripe / Razorpay integration — subscriptions, one-time payments, invoices.",
-        color: "#f59e0b",
+        color: "text-amber-500",
+        bg: "bg-amber-500/10",
         tag: "Planned",
     },
     {
         icon: <Bot size={18} />,
         label: "AI Assistant",
         desc: "Embed Claude or GPT — smart replies, message summaries, chat search via AI.",
-        color: "#10b981",
+        color: "text-emerald-500",
+        bg: "bg-emerald-500/10",
         tag: "Planned",
     },
     {
         icon: <Video size={18} />,
         label: "Video / Voice Calls",
         desc: "WebRTC peer-to-peer calls directly inside conversations.",
-        color: "#ec4899",
-        tag: "Ideas",
-    },
-    {
-        icon: <Bell size={18} />,
-        label: "Push Notifications",
-        desc: "Web Push API + FCM for mobile — notify users even when offline.",
-        color: "#8b5cf6",
-        tag: "Ideas",
-    },
-    {
-        icon: <BarChart3 size={18} />,
-        label: "Analytics Dashboard",
-        desc: "Message volume, active users, engagement charts for admins.",
-        color: "#0ea5e9",
-        tag: "Ideas",
-    },
-    {
-        icon: <FileText size={18} />,
-        label: "File & Media Sharing",
-        desc: "Upload images, PDFs, voice notes via S3 presigned URLs.",
-        color: "#f97316",
-        tag: "Ideas",
-    },
-    {
-        icon: <Layers size={18} />,
-        label: "Multi-tenancy / Workspaces",
-        desc: "Slack-style workspaces — multiple orgs under one platform.",
-        color: "#14b8a6",
+        color: "text-pink-500",
+        bg: "bg-pink-500/10",
         tag: "Ideas",
     },
 ];
 
-const TAG_COLOR: Record<string, string> = {
-    "Next up": "#6366f1",
-    "Planned": "#f59e0b",
-    "Ideas": "#64748b",
-};
-
 export default function Home() {
     const token = useSelector(getToken);
     const heroRef = useRef<HTMLDivElement>(null);
+
+    const { data: homeData } = useGetApi<{ 
+        info: string; 
+        stats: { users: number; groups: number; messages: number } 
+    }>("/");
+    const { data: usersData } = useGetApi<{ count: number }>("/users", { limit: 1 }, { enabled: !!token });
+    const { data: groupsData } = useGetApi<{ count: number }>("/groups", { limit: 1 }, { enabled: !!token });
+
+    const welcomeInfo = homeData?.data?.info || "JWT + Google OAuth, real-time messaging with seen receipts, and a growing suite of features — all in one platform.";
+    const userCount = homeData?.data?.stats?.users || usersData?.data?.count || 1200;
+    const groupCount = homeData?.data?.stats?.groups || groupsData?.data?.count || 45;
 
     /* subtle mouse-parallax on hero */
     useEffect(() => {
@@ -139,377 +110,204 @@ export default function Home() {
     }, []);
 
     return (
-        <>
-            <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap');
+        <div className="flex flex-col items-center bg-background transition-colors duration-300">
+            {/* HERO SECTION */}
+            <section 
+                ref={heroRef}
+                className="relative flex min-h-[calc(100vh-64px)] w-full flex-col items-center justify-center overflow-hidden px-4 pt-20 pb-16 text-center sm:px-6 lg:px-8"
+            >
+                {/* Background Decor */}
+                <div 
+                    className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_60%_50%_at_30%_40%,rgba(59,130,246,0.1),transparent)] transition-transform duration-75 ease-linear"
+                    style={{ transform: 'translate(var(--mx, 0), var(--my, 0))' }}
+                />
+                <div className="absolute inset-0 -z-20 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
 
-                *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-                :root {
-                    --bg: #07080d;
-                    --surface: #0e1117;
-                    --border: rgba(255,255,255,0.08);
-                    --accent: #4f8dff;
-                    --accent2: #a78bfa;
-                    --text: #f0f2f8;
-                    --muted: #6b7280;
-                    --font-display: 'Syne', sans-serif;
-                    --font-body: 'DM Sans', sans-serif;
-                }
-
-                body { background: var(--bg); color: var(--text); font-family: var(--font-body); }
-
-                /* ── nav ── */
-                .nav {
-                    position: sticky; top: 0; z-index: 50;
-                    display: flex; align-items: center; justify-content: space-between;
-                    padding: 0 2rem; height: 64px;
-                    background: rgba(7,8,13,0.8);
-                    backdrop-filter: blur(16px);
-                    border-bottom: 1px solid var(--border);
-                }
-                .logo { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-size: 1.2rem; }
-                .logo-icon { width: 36px; height: 36px; background: var(--accent); border-radius: 10px; display:flex; align-items:center; justify-content:center; }
-                .nav-actions { display: flex; gap: 10px; }
-                .btn-ghost {
-                    padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
-                    background: transparent; color: var(--text); font-family: var(--font-body);
-                    font-size: .875rem; cursor: pointer; transition: border-color .2s;
-                    text-decoration: none; display: inline-flex; align-items: center;
-                }
-                .btn-ghost:hover { border-color: var(--accent); }
-                .btn-primary {
-                    padding: 8px 20px; border-radius: 8px; border: none;
-                    background: var(--accent); color: #fff; font-family: var(--font-body);
-                    font-size: .875rem; font-weight: 500; cursor: pointer;
-                    transition: opacity .2s; text-decoration: none;
-                    display: inline-flex; align-items: center; gap: 6px;
-                }
-                .btn-primary:hover { opacity: .88; }
-
-                /* ── hero ── */
-                .hero {
-                    --mx: 0px; --my: 0px;
-                    position: relative; overflow: hidden;
-                    min-height: calc(100vh - 64px);
-                    display: flex; flex-direction: column; align-items: center; justify-content: center;
-                    text-align: center; padding: 6rem 2rem;
-                }
-                .hero-glow {
-                    position: absolute; inset: 0; pointer-events: none;
-                    background:
-                        radial-gradient(ellipse 60% 50% at 30% 40%, rgba(79,141,255,.13) 0%, transparent 70%),
-                        radial-gradient(ellipse 50% 40% at 70% 60%, rgba(167,139,250,.10) 0%, transparent 70%);
-                    transform: translate(var(--mx), var(--my));
-                    transition: transform .08s linear;
-                }
-                .hero-grid {
-                    position: absolute; inset: 0; pointer-events: none; opacity: .04;
-                    background-image: linear-gradient(var(--border) 1px, transparent 1px),
-                                      linear-gradient(90deg, var(--border) 1px, transparent 1px);
-                    background-size: 48px 48px;
-                }
-                .badge {
-                    display: inline-flex; align-items: center; gap: 6px;
-                    font-size: .75rem; font-weight: 500; letter-spacing: .04em;
-                    color: var(--accent); background: rgba(79,141,255,.1);
-                    border: 1px solid rgba(79,141,255,.25); border-radius: 999px;
-                    padding: 4px 14px; margin-bottom: 2rem;
-                    animation: fadeUp .6s ease both;
-                }
-                .hero h1 {
-                    font-family: var(--font-display); font-size: clamp(2.8rem, 7vw, 5.5rem);
-                    line-height: 1.05; letter-spacing: -.02em; color: var(--text);
-                    max-width: 820px; margin-bottom: 1.5rem;
-                    animation: fadeUp .7s .1s ease both;
-                }
-                .hero h1 em { font-style: normal; color: var(--accent); }
-                .hero p {
-                    font-size: 1.1rem; color: var(--muted); max-width: 560px; line-height: 1.7;
-                    margin-bottom: 2.5rem; animation: fadeUp .7s .2s ease both;
-                }
-                .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; animation: fadeUp .7s .3s ease both; }
-                .btn-lg { padding: 12px 28px; font-size: 1rem; border-radius: 10px; }
-
-                /* particles */
-                .particle-dot {
-                    position: absolute; border-radius: 50%;
-                    background: var(--accent); opacity: .5;
-                    animation: float linear infinite;
-                }
-                @keyframes float {
-                    0%   { transform: translateY(0) scale(1); opacity: .4; }
-                    50%  { opacity: .8; }
-                    100% { transform: translateY(-120px) scale(.6); opacity: 0; }
-                }
-
-                /* ── stats ── */
-                .stats {
-                    display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap;
-                    padding: 3rem 2rem; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-                    background: var(--surface);
-                }
-                .stat { text-align: center; }
-                .stat-num { font-family: var(--font-display); font-size: 2.4rem; color: var(--text); }
-                .stat-label { font-size: .8rem; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .08em; }
-
-                /* ── stack pills ── */
-                .section { padding: 5rem 2rem; max-width: 1100px; margin: 0 auto; }
-                .section-label {
-                    font-size: .75rem; letter-spacing: .12em; text-transform: uppercase;
-                    color: var(--accent); font-weight: 600; margin-bottom: .75rem;
-                }
-                .section-title { font-family: var(--font-display); font-size: clamp(1.8rem,4vw,2.6rem); margin-bottom: 1rem; }
-                .section-sub { color: var(--muted); font-size: 1rem; line-height: 1.7; max-width: 520px; margin-bottom: 2.5rem; }
-
-                .pills { display: flex; flex-wrap: wrap; gap: 10px; }
-                .pill {
-                    display: inline-flex; align-items: center; gap: 8px;
-                    padding: 8px 16px; border-radius: 999px;
-                    border: 1px solid var(--border); background: var(--surface);
-                    font-size: .875rem; color: var(--text);
-                    transition: border-color .2s, transform .2s;
-                }
-                .pill:hover { border-color: var(--accent); transform: translateY(-2px); }
-
-                /* ── done / roadmap ── */
-                .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-                @media(max-width:720px){ .two-col { grid-template-columns: 1fr; } }
-
-                .done-list { display: flex; flex-direction: column; gap: 12px; }
-                .done-item {
-                    display: flex; align-items: center; gap: 12px;
-                    padding: 14px 18px; border-radius: 12px;
-                    background: var(--surface); border: 1px solid var(--border);
-                }
-                .done-check {
-                    width: 24px; height: 24px; border-radius: 50%;
-                    background: rgba(16,185,129,.15); color: #10b981;
-                    display: flex; align-items: center; justify-content: center; font-size: .7rem; flex-shrink: 0;
-                }
-
-                /* roadmap grid */
-                .roadmap-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap: 16px; }
-                .road-card {
-                    background: var(--surface); border: 1px solid var(--border);
-                    border-radius: 14px; padding: 20px;
-                    transition: border-color .25s, transform .25s;
-                    position: relative; overflow: hidden;
-                }
-                .road-card::before {
-                    content: ''; position: absolute; inset: 0;
-                    background: var(--card-color); opacity: 0;
-                    transition: opacity .25s;
-                }
-                .road-card:hover { transform: translateY(-4px); border-color: var(--card-color); }
-                .road-card:hover::before { opacity: .05; }
-                .road-icon {
-                    width: 38px; height: 38px; border-radius: 10px;
-                    display: flex; align-items: center; justify-content: center;
-                    margin-bottom: 14px; color: #fff;
-                }
-                .road-title { font-family: var(--font-display); font-size: 1rem; margin-bottom: 6px; }
-                .road-desc { font-size: .83rem; color: var(--muted); line-height: 1.6; }
-                .road-tag {
-                    display: inline-block; margin-top: 12px;
-                    font-size: .7rem; font-weight: 600; letter-spacing: .06em;
-                    padding: 2px 10px; border-radius: 999px; color: #fff;
-                }
-
-                /* ── CTA band ── */
-                .cta-band {
-                    margin: 4rem 2rem; border-radius: 20px;
-                    padding: 4rem 2rem; text-align: center;
-                    background: linear-gradient(135deg, rgba(79,141,255,.12), rgba(167,139,250,.08));
-                    border: 1px solid rgba(79,141,255,.2);
-                    position: relative; overflow: hidden;
-                }
-                .cta-band h2 { font-family: var(--font-display); font-size: clamp(1.6rem,4vw,2.4rem); margin-bottom: 1rem; }
-                .cta-band p { color: var(--muted); margin-bottom: 2rem; font-size: 1rem; }
-
-                /* ── footer ── */
-                .footer {
-                    border-top: 1px solid var(--border); padding: 2rem;
-                    text-align: center; color: var(--muted); font-size: .82rem;
-                }
-
-                @keyframes fadeUp {
-                    from { opacity: 0; transform: translateY(24px); }
-                    to   { opacity: 1; transform: translateY(0); }
-                }
-            `}</style>
-
-            {/* NAV */}
-            <header className="nav">
-                <div className="logo">
-                    <div className="logo-icon">
-                        <ShieldCheck size={18} color="#fff" />
+                {/* Content */}
+                <div className="mx-auto flex max-w-4xl animate-in fade-in slide-in-from-bottom-8 duration-700 flex-col items-center">
+                    <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-primary">
+                        <Sparkles size={14} />
+                        <span>Full-stack · Real-time · Production-ready</span>
                     </div>
-                    NexusApp
-                </div>
-                <div className="nav-actions">
-                    {token ? (
-                        <Link to={ROUTES.DASHBOARD.path} className="btn-primary">
-                            Dashboard <ArrowRight size={14} />
-                        </Link>
-                    ) : (
-                        <>
-                            <Link to={ROUTES.LOGIN.path} className="btn-ghost">Sign in</Link>
-                            <Link to={ROUTES.REGISTER.path} className="btn-primary">
-                                Get started <ArrowRight size={14} />
+
+                    <h1 className="font-display text-4xl font-extrabold tracking-tight text-foreground sm:text-6xl lg:text-7xl">
+                        Build apps with auth,<br />
+                        chat & <span className="text-primary">everything else</span>
+                    </h1>
+
+                    <p className="mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
+                        {welcomeInfo}
+                    </p>
+
+                    <div className="mt-10 flex flex-wrap justify-center gap-4">
+                        {token ? (
+                            <Link to={ROUTES.DASHBOARD.path}>
+                                <Button size="lg" className="rounded-xl px-10 shadow-xl shadow-primary/25 font-bold">
+                                    Go to Dashboard <LayoutDashboard size={18} className="ml-2" />
+                                </Button>
                             </Link>
-                        </>
-                    )}
-                </div>
-            </header>
-
-            {/* HERO */}
-            <section className="hero" ref={heroRef}>
-                <div className="hero-glow" />
-                <div className="hero-grid" />
-
-                {/* floating particles */}
-                {[
-                    { w: 4, l: "15%", t: "70%", dur: "6s", del: "0s" },
-                    { w: 6, l: "80%", t: "60%", dur: "8s", del: "1s" },
-                    { w: 3, l: "50%", t: "80%", dur: "7s", del: "2s" },
-                    { w: 5, l: "25%", t: "50%", dur: "9s", del: ".5s" },
-                    { w: 4, l: "65%", t: "75%", dur: "6.5s", del: "3s" },
-                ].map((p, i) => (
-                    <Dot key={i} style={{
-                        width: p.w, height: p.w,
-                        left: p.l, top: p.t,
-                        animationDuration: p.dur, animationDelay: p.del,
-                    }} />
-                ))}
-
-                <div className="badge">
-                    <Sparkles size={12} /> Full-stack · Real-time · Production-ready
-                </div>
-
-                <h1>
-                    Build apps with auth,<br />
-                    chat & <em>everything else</em>
-                </h1>
-
-                <p>
-                    JWT + Google OAuth, real-time messaging with seen receipts,
-                    and a growing suite of features — all in one platform.
-                </p>
-
-                {!token && (
-                    <div className="hero-ctas">
-                        <Link to={ROUTES.REGISTER.path} className="btn-primary btn-lg">
-                            Create free account <ArrowRight size={15} />
-                        </Link>
-                        <Link to={ROUTES.LOGIN.path} className="btn-ghost btn-lg">
-                            Sign in
-                        </Link>
+                        ) : (
+                            <>
+                                <Link to={ROUTES.REGISTER.path}>
+                                    <Button size="lg" className="rounded-xl px-8 shadow-xl shadow-primary/25">
+                                        Create free account <ArrowRight size={18} className="ml-2" />
+                                    </Button>
+                                </Link>
+                                <Link to={ROUTES.LOGIN.path}>
+                                    <Button variant="outline" size="lg" className="rounded-xl px-8">
+                                        Sign in
+                                    </Button>
+                                </Link>
+                            </>
+                        )}
                     </div>
-                )}
+                </div>
             </section>
 
-            {/* STATS */}
-            <div className="stats">
-                {[
-                    { to: 12000, suffix: "+", label: "Messages sent" },
-                    { to: 3, suffix: "ms", label: "Avg. delivery time" },
-                    { to: 99, suffix: ".9%", label: "Uptime SLA" },
-                    { to: 8, suffix: " features", label: "Roadmap items" },
-                ].map(s => (
-                    <div className="stat" key={s.label}>
-                        <div className="stat-num"><Counter to={s.to} suffix={s.suffix} /></div>
-                        <div className="stat-label">{s.label}</div>
-                    </div>
-                ))}
-            </div>
-
-            {/* TECH STACK */}
-            <div className="section">
-                <div className="section-label">Stack</div>
-                <h2 className="section-title">What's already built</h2>
-                <p className="section-sub">
-                    A solid, production-ready foundation so you can focus on shipping features.
-                </p>
-                <div className="pills">
-                    {STACK.map(s => (
-                        <span className="pill" key={s.label}>{s.icon} {s.label}</span>
-                    ))}
-                </div>
-            </div>
-
-            {/* DONE + ROADMAP */}
-            <div className="section" style={{ paddingTop: 0 }}>
-                <div className="two-col" style={{ marginBottom: "3rem" }}>
-                    <div>
-                        <div className="section-label">Shipped ✓</div>
-                        <h2 className="section-title" style={{ fontSize: "1.6rem" }}>Live today</h2>
-                        <div className="done-list" style={{ marginTop: "1.5rem" }}>
-                            {DONE.map(d => (
-                                <div className="done-item" key={d.label}>
-                                    <div className="done-check">✓</div>
-                                    <span style={{ color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
-                                        {d.icon} {d.label}
-                                    </span>
+            {/* STATS SECTION */}
+            <section className="w-full border-y bg-muted/30 py-12">
+                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                    <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+                        {[
+                            { to: userCount * 10, suffix: "+", label: "Messages sent" },
+                            { to: 3, suffix: "ms", label: "Avg. delivery time" },
+                            { to: 99, suffix: ".9%", label: "Uptime SLA" },
+                            { to: groupCount, suffix: "", label: "Active Communities" },
+                        ].map((s) => (
+                            <div key={s.label} className="text-center">
+                                <div className="font-display text-3xl font-bold text-foreground sm:text-4xl">
+                                    <Counter to={s.to} suffix={s.suffix} />
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                        <div className="section-label">Coming next</div>
-                        <h2 className="section-title" style={{ fontSize: "1.6rem" }}>What's being built</h2>
-                        <p className="section-sub" style={{ marginBottom: 0 }}>
-                            Group chat and payments are next on the roadmap. Below is the full
-                            wishlist — contributions and ideas welcome.
-                        </p>
+                                <div className="mt-1 text-sm font-medium uppercase tracking-widest text-muted-foreground">{s.label}</div>
+                            </div>
+                        ))}
                     </div>
                 </div>
+            </section>
 
-                {/* ROADMAP CARDS */}
-                <div className="section-label">Roadmap</div>
-                <h2 className="section-title" style={{ marginBottom: "1.5rem" }}>What's coming</h2>
-                <div className="roadmap-grid">
-                    {ROADMAP.map(r => (
-                        <div
-                            className="road-card"
-                            key={r.label}
-                            style={{ ["--card-color" as string]: r.color }}
-                        >
-                            <div className="road-icon" style={{ background: r.color + "22", color: r.color }}>
-                                {r.icon}
+            {/* FEATURES SECTION */}
+            <section className="w-full max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+                <div className="mb-16">
+                    <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-primary">Capabilities</h2>
+                    <h3 className="mt-4 font-display text-3xl font-bold text-foreground sm:text-4xl">What's already built</h3>
+                    <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
+                        A solid, production-ready foundation so you can focus on shipping features.
+                    </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {STACK.map((s, i) => (
+                        <div key={i} className="flex items-center gap-4 rounded-2xl border bg-card p-4 transition-all hover:border-primary/50 hover:shadow-md">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                {s.icon}
                             </div>
-                            <div className="road-title">{r.label}</div>
-                            <div className="road-desc">{r.desc}</div>
-                            <span className="road-tag" style={{ background: TAG_COLOR[r.tag] + "33", color: TAG_COLOR[r.tag] }}>
-                                {r.tag}
-                            </span>
+                            <span className="font-semibold text-foreground">{s.label}</span>
                         </div>
                     ))}
                 </div>
-            </div>
+            </section>
 
-            {/* CTA BAND */}
-            {!token && (
-                <div style={{ maxWidth: 1100, margin: "0 auto", width: "100%" }}>
-                    <div className="cta-band">
-                        <h2>Ready to start building?</h2>
-                        <p>Sign up in seconds. No credit card required.</p>
-                        <div className="hero-ctas">
-                            <Link to={ROUTES.REGISTER.path} className="btn-primary btn-lg">
-                                Create free account <ArrowRight size={15} />
-                            </Link>
-                            <Link to={ROUTES.LOGIN.path} className="btn-ghost btn-lg">
-                                Sign in
-                            </Link>
+            {/* SHIPPED vs ROADMAP */}
+            <section className="w-full bg-muted/20 py-24">
+                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                    <div className="grid gap-16 lg:grid-cols-2">
+                        {/* Shipped */}
+                        <div>
+                            <div className="mb-8">
+                                <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-green-500">Shipped ✓</h2>
+                                <h3 className="mt-4 font-display text-3xl font-bold text-foreground">Live today</h3>
+                            </div>
+                            <div className="space-y-4">
+                                {DONE.map((d, i) => (
+                                    <div key={i} className="flex items-center gap-4 rounded-2xl border bg-card p-5">
+                                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-500/10 text-green-500">
+                                            <ShieldCheck size={14} />
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-muted-foreground">{d.icon}</span>
+                                            <span className="font-medium text-foreground">{d.label}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Roadmap */}
+                        <div>
+                            <div className="mb-8">
+                                <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-primary">Coming Next</h2>
+                                <h3 className="mt-4 font-display text-3xl font-bold text-foreground">What's being built</h3>
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                {ROADMAP.map((r, i) => (
+                                    <div key={i} className="group rounded-2xl border bg-card p-6 transition-all hover:border-primary/50">
+                                        <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${r.bg} ${r.color}`}>
+                                            {r.icon}
+                                        </div>
+                                        <h4 className="font-display font-bold text-foreground">{r.label}</h4>
+                                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{r.desc}</p>
+                                        <div className="mt-4">
+                                            <span className={`inline-block rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${r.bg} ${r.color}`}>
+                                                {r.tag}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
-            )}
+            </section>
+
+            {/* CALL TO ACTION */}
+            <section className="w-full px-4 py-24 sm:px-6 lg:px-8">
+                <div className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-primary px-8 py-16 text-center text-primary-foreground shadow-2xl">
+                    <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent)]" />
+                    <h2 className="font-display text-3xl font-extrabold sm:text-5xl">Ready to start building?</h2>
+                    <p className="mx-auto mt-6 max-w-xl text-lg opacity-90 sm:text-xl">
+                        {token 
+                            ? "Explore your dashboard and start managing your real-time conversations today." 
+                            : "Sign up in seconds. Join thousands of developers building the future of real-time applications."}
+                    </p>
+                    <div className="mt-10 flex flex-wrap justify-center gap-4">
+                        {token ? (
+                            <Link to={ROUTES.DASHBOARD.path} className="w-full sm:w-auto">
+                                <Button size="lg" variant="secondary" className="w-full sm:w-auto rounded-xl px-12 font-bold shadow-lg">
+                                    Go to Dashboard <LayoutDashboard size={18} className="ml-2" />
+                                </Button>
+                            </Link>
+                        ) : (
+                            <Link to={ROUTES.REGISTER.path} className="w-full sm:w-auto">
+                                <Button size="lg" variant="secondary" className="w-full sm:w-auto rounded-xl px-10 font-bold shadow-lg">
+                                    Get Started for Free
+                                </Button>
+                            </Link>
+                        )}
+                    </div>
+                </div>
+            </section>
 
             {/* FOOTER */}
-            <footer className="footer">
-                © {new Date().getFullYear()} NexusApp · Built with Node.js, React & Socket.IO
+            <footer className="w-full border-t py-12 px-4 text-center sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
+                        <div className="flex items-center gap-2 font-display font-bold text-foreground">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                                <ShieldCheck size={16} />
+                            </div>
+                            NexusApp
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            © {new Date().getFullYear()} NexusApp · Built with Node.js, React & Socket.IO
+                        </p>
+                        <div className="flex gap-6 text-sm font-medium text-muted-foreground">
+                            <a href="#" className="hover:text-primary transition-colors">Twitter</a>
+                            <a href="#" className="hover:text-primary transition-colors">GitHub</a>
+                            <a href="#" className="hover:text-primary transition-colors">Discord</a>
+                        </div>
+                    </div>
+                </div>
             </footer>
-        </>
+        </div>
     );
 }
