@@ -84,10 +84,10 @@ export default function Home() {
     const token = useSelector(getToken);
     const heroRef = useRef<HTMLDivElement>(null);
 
-    const { data: homeData } = useGetApi<{ 
-        info: string; 
-        stats: { users: number; groups: number; messages: number } 
-    }>("/");
+    const { data: homeData } = useGetApi<{
+        info: string;
+        stats: { users: number; groups: number; messages: number }
+    }>("/home");
     const { data: usersData } = useGetApi<{ count: number }>("/users", { limit: 1 }, { enabled: !!token });
     const { data: groupsData } = useGetApi<{ count: number }>("/groups", { limit: 1 }, { enabled: !!token });
 
@@ -112,12 +112,12 @@ export default function Home() {
     return (
         <div className="flex flex-col items-center bg-background transition-colors duration-300">
             {/* HERO SECTION */}
-            <section 
+            <section
                 ref={heroRef}
                 className="relative flex min-h-[calc(100vh-64px)] w-full flex-col items-center justify-center overflow-hidden px-4 pt-20 pb-16 text-center sm:px-6 lg:px-8"
             >
                 {/* Background Decor */}
-                <div 
+                <div
                     className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_60%_50%_at_30%_40%,rgba(59,130,246,0.1),transparent)] transition-transform duration-75 ease-linear"
                     style={{ transform: 'translate(var(--mx, 0), var(--my, 0))' }}
                 />
@@ -265,8 +265,8 @@ export default function Home() {
                     <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent)]" />
                     <h2 className="font-display text-3xl font-extrabold sm:text-5xl">Ready to start building?</h2>
                     <p className="mx-auto mt-6 max-w-xl text-lg opacity-90 sm:text-xl">
-                        {token 
-                            ? "Explore your dashboard and start managing your real-time conversations today." 
+                        {token
+                            ? "Explore your dashboard and start managing your real-time conversations today."
                             : "Sign up in seconds. Join thousands of developers building the future of real-time applications."}
                     </p>
                     <div className="mt-10 flex flex-wrap justify-center gap-4">
