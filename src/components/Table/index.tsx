@@ -26,7 +26,7 @@ function Table<T>({
     enablePagination = false
 }: TableProps<T>) {
 
-    const { control } = useForm({
+    const { control } = useForm<{ perPage: { label: string; value: number } }>({
         defaultValues: {
             perPage: { label: "10", value: 10 }
         }

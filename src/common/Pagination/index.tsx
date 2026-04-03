@@ -1,10 +1,9 @@
-import React from "react";
 import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
-import { type Control } from "react-hook-form";
+import { type Control, type FieldValues, type Path } from "react-hook-form";
 import Select, { type Option } from "@/common/ReactSelect";
 import Button from "@/common/Button";
 
-interface PaginationProps {
+interface PaginationProps<T extends FieldValues = any> {
     pageIndex: number;
     pageCount: number;
     canPreviousPage: boolean;
@@ -16,11 +15,11 @@ interface PaginationProps {
     onLast: () => void;
 
     perPageOptions: Option[];
-    control: Control<any>;
+    control: Control<T>;
     onPerPageChange: (value: number) => void;
 }
 
-const Pagination: React.FC<PaginationProps> = ({
+const Pagination = <T extends FieldValues>({
     pageIndex,
     pageCount,
     canPreviousPage,
@@ -32,7 +31,7 @@ const Pagination: React.FC<PaginationProps> = ({
     perPageOptions,
     control,
     onPerPageChange
-}) => {
+}: PaginationProps<T>) => {
 
     return (
         <div className="flex items-center justify-between mt-4">
@@ -40,7 +39,7 @@ const Pagination: React.FC<PaginationProps> = ({
             {/* Per Page */}
             <div className="w-32">
                 <Select
-                    name="perPage"
+                    name={"perPage" as Path<T>}
                     control={control}
                     options={perPageOptions}
                     placeholder="Per Page"
