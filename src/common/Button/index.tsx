@@ -1,5 +1,7 @@
 import React from "react"
 import Loader from "@/common/Loader"
+import { useSelector } from "react-redux"
+import type { RootState } from "@/redux/store"
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     loading?: boolean
@@ -13,7 +15,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const Button: React.FC<ButtonProps> = ({
     children,
-    loading = false,
+    loading: localLoading = false,
     variant = 'primary',
     size = 'md',
     color,
@@ -24,6 +26,8 @@ const Button: React.FC<ButtonProps> = ({
     className = "",
     ...props
 }) => {
+    const isGlobalLoading = useSelector((state: RootState) => state.loading.isLoading)
+    const loading = localLoading || isGlobalLoading
     const isDisabled = disabled || loading
 
     const variants = {

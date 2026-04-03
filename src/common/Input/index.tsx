@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import type { UseFormRegisterReturn } from "react-hook-form";
+import { useSelector } from "react-redux";
+import type { RootState } from "@/redux/store";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string;
@@ -23,16 +25,17 @@ const Input: React.FC<InputProps> = ({
     leftIcon,
     rightIcon,
     isPassword,
-    loading = false,
+    loading: localLoading = false,
     disabled,
     type = "text",
     ...props
 }) => {
+    const isGlobalLoading = useSelector((state: RootState) => state.loading.isLoading);
     const [showPassword, setShowPassword] = useState(false);
 
     const inputType = isPassword ? (showPassword ? "text" : "password") : type;
 
-    const isDisabled = disabled || loading;
+    const isDisabled = disabled || localLoading || isGlobalLoading;
 
     return (
         <div className={`flex flex-col gap-1.5 ${containerClassName}`}>
@@ -57,14 +60,14 @@ const Input: React.FC<InputProps> = ({
                     {...props}
                     className={`
                         flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm 
-                        ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium 
+                        text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium 
                         placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 
                         focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50
                         transition-all duration-200
                         ${leftIcon ? "pl-10" : ""}
                         ${isPassword || rightIcon ? "pr-10" : ""}
                         ${error ? "border-destructive ring-destructive/20 focus-visible:ring-destructive" : "focus-visible:ring-primary/20 focus-visible:border-primary"}
-                        ${isDisabled ? "bg-muted/30" : ""}
+                        ${isDisabled ? "bg-muted/30" : "bg-background"}
                         ${inputClassName}
                     `}
                 />

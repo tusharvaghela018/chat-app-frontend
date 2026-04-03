@@ -8,6 +8,8 @@ import { getUser } from "@/redux/slices/auth.slice"
 import type { IUser } from "@/types"
 import Button from "@/common/Button"
 
+import Input from "@/common/Input"
+
 interface IMessage {
     id: number
     content: string
@@ -105,7 +107,7 @@ const DirectChat = ({ user, onBack }: Props) => {
     }
 
     return (
-        <div className="flex-1 flex flex-col overflow-hidden bg-background">
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
 
             {/* header */}
             <div className="flex h-16 flex-shrink-0 items-center justify-between border-b bg-card px-4 shadow-sm sm:px-6">
@@ -176,7 +178,7 @@ const DirectChat = ({ user, onBack }: Props) => {
                             key={msg.id}
                             className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                         >
-                            <div className={`group relative px-4 py-2.5 text-sm max-w-[80%] sm:max-w-md break-words shadow-sm
+                            <div className={`group relative px-4 py-2.5 text-sm max-w-[85%] sm:max-w-md break-words shadow-sm
                                 ${isMine
                                     ? "bg-primary text-primary-foreground rounded-2xl rounded-br-none"
                                     : "bg-card text-foreground rounded-2xl rounded-bl-none border border-border"
@@ -204,14 +206,15 @@ const DirectChat = ({ user, onBack }: Props) => {
             </div>
 
             {/* input */}
-            <div className="border-t bg-card p-4 sm:px-6">
+            <div className="border-t bg-card p-4 pb-safe sm:px-6">
                 <div className="flex items-center gap-2 max-w-4xl mx-auto">
-                    <input
+                    <Input
                         value={input}
                         onChange={(e) => handleTyping(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && handleSend()}
                         placeholder={`Message ${user.name}...`}
-                        className="flex-1 rounded-2xl border bg-background px-4 py-3 text-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
+                        containerClassName="flex-1"
+                        inputClassName="rounded-2xl h-11"
                     />
                     <Button
                         onClick={handleSend}

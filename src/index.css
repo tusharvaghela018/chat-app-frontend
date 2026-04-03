@@ -81,6 +81,18 @@
   }
 }
 
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility bg-background {
+  background-color: hsl(var(--background));
+}
+
+@utility text-foreground {
+  color: hsl(var(--foreground));
+}
+
 /* Existing animations ... */
 
 @keyframes dotTyping {

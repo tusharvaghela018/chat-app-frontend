@@ -15,6 +15,8 @@ import JoinRequestsModal from "@/pages/chat/components/group/JoinRequestsModal"
 import { useGroupChat, type IGroupMessage } from "@/pages/chat/hooks"
 import { useSocket } from "@/hooks/socket"
 
+import Input from "@/common/Input"
+
 interface Props {
     group: IGroup
     onGroupLeft: () => void
@@ -438,7 +440,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
             </div>
 
             {/* input */}
-            <div className="border-t bg-card p-4 sm:px-6">
+            <div className="border-t bg-card p-4 pb-safe sm:px-6">
                 {liveGroup.settings?.who_can_send === "admins" && !isAdmin ? (
                     <div className="flex items-center justify-center p-2 bg-muted rounded-xl border border-dashed">
                         <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -447,12 +449,13 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                     </div>
                 ) : (
                     <div className="flex items-center gap-2 max-w-4xl mx-auto">
-                        <input
+                        <Input
                             value={input}
                             onChange={(e) => handleTyping(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && handleSend()}
                             placeholder={`Message ${liveGroup.name}...`}
-                            className="flex-1 rounded-2xl border bg-background px-4 py-3 text-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
+                            containerClassName="flex-1"
+                            inputClassName="rounded-2xl h-11"
                         />
                         <Button
                             onClick={handleSend}

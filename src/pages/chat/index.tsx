@@ -7,7 +7,7 @@ import CreateGroupModal from "@/pages/chat/components/group/CreateGroupModal"
 import type { IUser } from "@/types"
 import type { IGroup } from "@/types"
 import { useGetApi } from "@/hooks/api"
-import { Menu, ChevronLeft } from "lucide-react"
+import { Menu } from "lucide-react"
 import Button from "@/common/Button"
 
 const ChatPage = () => {
@@ -79,7 +79,7 @@ const ChatPage = () => {
             
             {/* Sidebar with responsive classes */}
             <div className={`
-                absolute inset-y-0 left-0 z-20 w-full sm:w-80 md:w-96 lg:w-[400px] transform transition-transform duration-300 ease-in-out bg-card border-r
+                absolute inset-y-0 left-0 z-30 w-[85%] sm:w-80 md:w-96 lg:w-[400px] transform transition-transform duration-300 ease-in-out bg-card border-r shadow-xl lg:shadow-none
                 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0 lg:static lg:block"}
             `}>
                 <Sidebar
@@ -94,19 +94,19 @@ const ChatPage = () => {
             </div>
 
             {/* Main Chat Area */}
-            <div className="flex-1 flex flex-col overflow-hidden w-full relative">
+            <div className="flex-1 flex flex-col overflow-hidden w-full relative h-full">
                 {/* Mobile Toggle Button (only visible when sidebar is closed on mobile) */}
-                {!isSidebarOpen && (
+                {(!selectedUser && !selectedGroup) && !isSidebarOpen && (
                     <button 
                         onClick={() => setIsSidebarOpen(true)}
-                        className="lg:hidden absolute top-4 left-4 z-30 p-2 rounded-full bg-primary text-primary-foreground shadow-lg"
+                        className="lg:hidden absolute top-4 left-4 z-20 p-2 rounded-lg bg-background border border-border text-foreground shadow-sm"
                     >
-                        <ChevronLeft size={20} />
+                        <Menu size={20} />
                     </button>
                 )}
 
                 {!selectedUser && !selectedGroup && (
-                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-muted/20">
                         <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-6 text-muted-foreground">
                             <Menu size={40} />
                         </div>
@@ -125,14 +125,13 @@ const ChatPage = () => {
                 )}
 
                 {selectedUser && (
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                         {/* Mobile Header Overlap Fix: Ensure the back button is visible if needed */}
+                    <div className="flex-1 flex flex-col h-full overflow-hidden">
                         <DirectChat user={selectedUser} onBack={() => setIsSidebarOpen(true)} />
                     </div>
                 )}
 
                 {selectedGroup && (
-                    <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 flex flex-col h-full overflow-hidden">
                         <GroupChat
                             group={selectedGroup}
                             onGroupLeft={handleGroupLeft}
@@ -152,7 +151,7 @@ const ChatPage = () => {
             {/* Mobile Overlay */}
             {isSidebarOpen && (
                 <div 
-                    className="fixed inset-0 bg-black/20 backdrop-blur-sm z-10 lg:hidden"
+                    className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-20 lg:hidden"
                     onClick={() => setIsSidebarOpen(false)}
                 />
             )}
