@@ -1,16 +1,15 @@
-import React from "react";
 import ReactSelect, { type Props as ReactSelectProps } from "react-select";
-import { Controller, type Control } from "react-hook-form";
+import { Controller, type Control, type FieldValues, type Path } from "react-hook-form";
 
 export interface Option {
     label: string;
     value: string | number;
 }
 
-interface SelectProps extends Partial<ReactSelectProps> {
+interface SelectProps<T extends FieldValues = any> extends Partial<ReactSelectProps> {
     label?: string;
-    name: string;
-    control: Control<any>;
+    name: Path<T>;
+    control: Control<T>;
     options: Option[];
     error?: string;
     placeholder?: string;
@@ -21,7 +20,7 @@ interface SelectProps extends Partial<ReactSelectProps> {
     isMulti?: boolean;
 }
 
-const Select: React.FC<SelectProps> = ({
+const Select = <T extends FieldValues>({
     label,
     name,
     control,
@@ -34,7 +33,7 @@ const Select: React.FC<SelectProps> = ({
     disabled = false,
     isMulti = false,
     ...props
-}) => {
+}: SelectProps<T>) => {
     const isDisabled = disabled || loading;
 
     return (
