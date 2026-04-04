@@ -64,11 +64,11 @@ const JoinRequestsModal = ({ open, onClose, groupId }: Props) => {
                 {isLoading && (
                     <div className="space-y-3">
                         {[...Array(3)].map((_, i) => (
-                            <div key={i} className="flex items-center gap-3 animate-pulse">
-                                <div className="w-10 h-10 bg-gray-200 rounded-full flex-shrink-0" />
-                                <div className="flex-1 space-y-1.5">
-                                    <div className="h-3 bg-gray-200 rounded w-1/2" />
-                                    <div className="h-2.5 bg-gray-100 rounded w-1/3" />
+                            <div key={i} className="flex items-center gap-3 animate-pulse p-3">
+                                <div className="w-10 h-10 bg-muted rounded-full flex-shrink-0" />
+                                <div className="flex-1 space-y-2">
+                                    <div className="h-4 bg-muted rounded w-1/2" />
+                                    <div className="h-3 bg-muted/60 rounded w-1/3" />
                                 </div>
                             </div>
                         ))}
@@ -76,55 +76,61 @@ const JoinRequestsModal = ({ open, onClose, groupId }: Props) => {
                 )}
 
                 {!isLoading && requests.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-40 gap-2">
-                        <Users size={32} className="text-gray-300" />
-                        <p className="text-sm text-gray-400">No pending requests</p>
+                    <div className="flex flex-col items-center justify-center h-48 gap-3">
+                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center">
+                            <Users size={32} className="text-muted-foreground/40" />
+                        </div>
+                        <p className="text-sm font-medium text-muted-foreground">No pending requests</p>
                     </div>
                 )}
 
-                {requests.map((req: IJoinRequest) => (
-                    <div
-                        key={req.id}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition"
-                    >
-                        {/* avatar */}
-                        <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-                            {req.requester.avatar
-                                ? <img src={req.requester.avatar} className="w-10 h-10 rounded-full object-cover" />
-                                : <Users size={16} className="text-purple-600" />
-                            }
-                        </div>
+                <div className="space-y-2">
+                    {requests.map((req: IJoinRequest) => (
+                        <div
+                            key={req.id}
+                            className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-accent/50 transition-colors"
+                        >
+                            {/* avatar */}
+                            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 border border-primary/20">
+                                {req.requester.avatar
+                                    ? <img src={req.requester.avatar} className="w-10 h-10 rounded-full object-cover" />
+                                    : <Users size={16} className="text-primary" />
+                                }
+                            </div>
 
-                        {/* info */}
-                        <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">{req.requester.name}</p>
-                            <p className="text-xs text-gray-400 truncate">{req.requester.email}</p>
-                            <p className="text-xs text-gray-400">
-                                {new Date(req.requested_at).toLocaleDateString()}
-                            </p>
-                        </div>
+                            {/* info */}
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-foreground truncate">{req.requester.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{req.requester.email}</p>
+                                <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                                    {new Date(req.requested_at).toLocaleDateString()}
+                                </p>
+                            </div>
 
-                        {/* actions */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                            <Button
-                                onClick={() => handleReview(req.id, "approved")}
-                                disabled={isPending}
-                                title="Approve"
-                                className="w-8 h-8 bg-green-100 hover:bg-green-200 text-green-600 rounded-lg flex items-center justify-center transition disabled:opacity-40"
-                            >
-                                <Check size={15} />
-                            </Button>
-                            <Button
-                                onClick={() => handleReview(req.id, "rejected")}
-                                disabled={isPending}
-                                title="Reject"
-                                className="w-8 h-8 bg-red-100 hover:bg-red-200 text-red-500 rounded-lg flex items-center justify-center transition disabled:opacity-40"
-                            >
-                                <X size={15} />
-                            </Button>
+                            {/* actions */}
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                <Button
+                                    size="icon"
+                                    onClick={() => handleReview(req.id, "approved")}
+                                    disabled={isPending}
+                                    title="Approve"
+                                    className="w-8 h-8 bg-green-500/10 hover:bg-green-500/20 text-green-500 rounded-lg flex items-center justify-center transition-colors disabled:opacity-40 border border-green-500/20"
+                                >
+                                    <Check size={16} />
+                                </Button>
+                                <Button
+                                    size="icon"
+                                    onClick={() => handleReview(req.id, "rejected")}
+                                    disabled={isPending}
+                                    title="Reject"
+                                    className="w-8 h-8 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg flex items-center justify-center transition-colors disabled:opacity-40 border border-destructive/20"
+                                >
+                                    <X size={16} />
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
 
             </div>
         </Modal>

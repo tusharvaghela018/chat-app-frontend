@@ -96,20 +96,21 @@ const EditGroupModal = ({ open, onClose, group }: Props) => {
         <Modal open={open} onClose={handleClose} title="Edit group">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 
-                <div className="flex justify-center">
+                <div className="flex justify-center mb-6">
                     <div className="relative">
-                        <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center overflow-hidden">
+                        <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center overflow-hidden border-2 border-primary/20">
                             {currentAvatar
-                                ? <img src={currentAvatar} className="w-20 h-20 object-cover" />
-                                : <Users size={32} className="text-purple-400" />
+                                ? <img src={currentAvatar} className="w-full h-full object-cover" />
+                                : <Users size={40} className="text-primary" />
                             }
                         </div>
                         <Button
                             type="button"
+                            size="icon"
                             onClick={() => fileInputRef.current?.click()}
-                            className="absolute bottom-0 right-0 w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center hover:bg-blue-700 transition"
+                            className="absolute bottom-0 right-0 w-8 h-8 rounded-full border-2 border-card shadow-lg"
                         >
-                            <Camera size={13} className="text-white" />
+                            <Camera size={14} />
                         </Button>
                         <input
                             ref={fileInputRef}
@@ -121,37 +122,39 @@ const EditGroupModal = ({ open, onClose, group }: Props) => {
                     </div>
                 </div>
 
-                <Input
-                    label="Group name"
-                    placeholder="e.g. Design team"
-                    error={errors.name?.message}
-                    register={register("name", {
-                        required: "Group name is required",
-                        minLength: {
-                            value: 3,
-                            message: "Name must be at least 3 characters",
-                        },
-                    })}
-                />
+                <div className="space-y-4">
+                    <Input
+                        label="Group name"
+                        placeholder="e.g. Design team"
+                        error={errors.name?.message}
+                        register={register("name", {
+                            required: "Group name is required",
+                            minLength: {
+                                value: 3,
+                                message: "Name must be at least 3 characters",
+                            },
+                        })}
+                    />
 
-                <Input
-                    label="Description (optional)"
-                    placeholder="What's this group about?"
-                    register={register("description")}
-                />
+                    <Input
+                        label="Description (optional)"
+                        placeholder="What's this group about?"
+                        register={register("description")}
+                    />
 
-                <Select
-                    label="Join mode"
-                    name="join_mode"
-                    control={control}
-                    options={joinModeOptions}
-                    placeholder="Select join mode..."
-                />
+                    <Select
+                        label="Join mode"
+                        name="join_mode"
+                        control={control}
+                        options={joinModeOptions}
+                        placeholder="Select join mode..."
+                    />
+                </div>
 
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-3 pt-6">
                     <Button
                         type="button"
-                        color="gray"
+                        variant="secondary"
                         fullWidth
                         onClick={handleClose}
                         disabled={isPending}

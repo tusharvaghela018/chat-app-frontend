@@ -60,7 +60,7 @@ const ForgotPasswordModal = ({ open, onClose }: ForgotPasswordModalProps) => {
     return (
         <Modal open={open} onClose={onClose} title="Forgot Password">
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted-foreground">
                     Enter your email address and we'll send you a link to reset your password.
                 </p>
 
@@ -73,8 +73,8 @@ const ForgotPasswordModal = ({ open, onClose }: ForgotPasswordModalProps) => {
                     error={errors.email?.message}
                 />
 
-                <div className="flex justify-end gap-3 mt-2">
-                    <Button type="button" color="gray" onClick={onClose}>
+                <div className="flex justify-end gap-3 mt-4">
+                    <Button type="button" variant="secondary" onClick={onClose}>
                         Cancel
                     </Button>
                     <Button type="submit" loading={isPending}>

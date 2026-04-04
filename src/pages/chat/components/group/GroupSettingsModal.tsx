@@ -124,10 +124,10 @@ const GroupSettingsModal = ({ open, onClose, groupId, settings }: Props) => {
                     options={memberOptions}
                 />
 
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-3 pt-4">
                     <Button
                         type="button"
-                        color="gray"
+                        variant="secondary"
                         fullWidth
                         onClick={handleClose}
                         disabled={isPending}

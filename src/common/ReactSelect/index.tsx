@@ -37,10 +37,10 @@ const Select = <T extends FieldValues>({
     const isDisabled = disabled || loading;
 
     return (
-        <div className={`flex flex-col gap-1 ${containerClassName}`}>
+        <div className={`flex flex-col gap-1.5 ${containerClassName}`}>
 
             {label && (
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-semibold text-foreground/80 ml-0.5">
                     {label}
                 </label>
             )}
@@ -65,19 +65,68 @@ const Select = <T extends FieldValues>({
                                 ...base,
                                 minHeight: "42px",
                                 borderRadius: "8px",
+                                backgroundColor: "hsl(var(--background))",
                                 borderColor: error
-                                    ? "#ef4444"
+                                    ? "hsl(var(--destructive))"
                                     : state.isFocused
-                                        ? "#3b82f6"
-                                        : "#d1d5db",
-                                boxShadow: "none",
+                                        ? "hsl(var(--primary))"
+                                        : "hsl(var(--border))",
+                                boxShadow: state.isFocused ? "0 0 0 2px hsl(var(--ring) / 0.2)" : "none",
                                 "&:hover": {
-                                    borderColor: "#3b82f6",
+                                    borderColor: error ? "hsl(var(--destructive))" : "hsl(var(--primary))",
                                 },
                             }),
                             menu: (base) => ({
                                 ...base,
                                 zIndex: 9999,
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                            }),
+                            option: (base, state) => ({
+                                ...base,
+                                backgroundColor: state.isSelected
+                                    ? "hsl(var(--primary))"
+                                    : state.isFocused
+                                        ? "hsl(var(--accent))"
+                                        : "transparent",
+                                color: state.isSelected
+                                    ? "hsl(var(--primary-foreground))"
+                                    : "hsl(var(--foreground))",
+                                "&:active": {
+                                    backgroundColor: "hsl(var(--primary))",
+                                    color: "hsl(var(--primary-foreground))",
+                                },
+                            }),
+                            singleValue: (base) => ({
+                                ...base,
+                                color: "hsl(var(--foreground))",
+                            }),
+                            multiValue: (base) => ({
+                                ...base,
+                                backgroundColor: "hsl(var(--secondary))",
+                                borderRadius: "4px",
+                            }),
+                            multiValueLabel: (base) => ({
+                                ...base,
+                                color: "hsl(var(--secondary-foreground))",
+                            }),
+                            multiValueRemove: (base) => ({
+                                ...base,
+                                color: "hsl(var(--secondary-foreground))",
+                                "&:hover": {
+                                    backgroundColor: "hsl(var(--destructive) / 0.1)",
+                                    color: "hsl(var(--destructive))",
+                                },
+                            }),
+                            placeholder: (base) => ({
+                                ...base,
+                                color: "hsl(var(--muted-foreground))",
+                            }),
+                            input: (base) => ({
+                                ...base,
+                                color: "hsl(var(--foreground))",
                             }),
                         }}
                     />
@@ -85,7 +134,7 @@ const Select = <T extends FieldValues>({
             />
 
             {error && (
-                <p className="text-sm text-red-500">
+                <p className="text-xs font-medium text-destructive mt-0.5 ml-0.5">
                     {error}
                 </p>
             )}

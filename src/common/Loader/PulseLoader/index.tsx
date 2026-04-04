@@ -19,12 +19,12 @@ const PulseLoader: React.FC<LoaderProps> = ({
 
     return (
         <div
-            className={`flex items-center justify-center ${fullScreen ? "fixed inset-0 bg-white z-50" : "w-full py-10"
+            className={`flex items-center justify-center ${fullScreen ? "fixed inset-0 bg-background z-50" : "w-full py-10"
                 }`}
         >
             <div className={`relative ${loaderSize}`}>
-                <span className="absolute inset-0 rounded-full bg-blue-500 opacity-75 animate-ping"></span>
-                <span className="relative block w-full h-full rounded-full bg-blue-500"></span>
+                <span className="absolute inset-0 rounded-full bg-primary opacity-75 animate-ping"></span>
+                <span className="relative block w-full h-full rounded-full bg-primary"></span>
             </div>
         </div>
     );

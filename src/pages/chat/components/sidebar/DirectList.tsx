@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Search } from "lucide-react"
+import { useSelector } from "react-redux"
+import type { RootState } from "@/redux/store"
 import { useGetApi } from "@/hooks/api"
 import useDebounce from "@/hooks/debounce"
 import type { IUser } from "@/types"
@@ -62,6 +64,8 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
         return () => observer.disconnect()
     }, [handleObserver])
 
+    const isGlobalLoading = useSelector((state: RootState) => state.loading.isLoading)
+
     return (
         <div className="flex flex-col h-full bg-card">
             <div className="px-4 pb-4">
@@ -69,14 +73,15 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
                     <input
                         value={search}
+                        disabled={isGlobalLoading}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Search users..."
-                        className="w-full pl-10 pr-4 py-2 text-sm bg-background border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
+                        className="w-full pl-10 pr-4 py-2 text-sm bg-background border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-2 custom-scrollbar">
+            <div className={`flex-1 overflow-y-auto px-2 custom-scrollbar ${isGlobalLoading ? "pointer-events-none opacity-80" : ""}`}>
 
                 {isFetching && userList.length === 0 && <ListSkeleton />}
 
@@ -103,7 +108,7 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
                         >
                             <div className="relative flex-shrink-0">
                                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-display font-bold shadow-inner overflow-hidden
-                                    ${selectedUserId === user.id ? "bg-white/20" : "bg-primary/10 text-primary"}`}>
+                                    ${selectedUserId === user.id ? "bg-primary-foreground/20" : "bg-primary/10 text-primary"}`}>
                                     {user.avatar
                                         ? <img src={user.avatar} className="w-full h-full object-cover" />
                                         : user.name[0].toUpperCase()

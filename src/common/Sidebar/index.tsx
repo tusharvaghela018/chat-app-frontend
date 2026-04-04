@@ -42,25 +42,27 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Sidebar */}
             <div
-                className={`fixed top-0 ${sidePosition} h-screen bg-gray-900 text-white z-50
-                    transform transition-transform duration-300 flex flex-col
+                className={`fixed top-0 ${sidePosition} h-screen bg-card text-foreground z-50
+                    transform transition-transform duration-300 flex flex-col shadow-2xl border-l border-border
                     ${width}
                     ${translateClass}`}
             >
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
-                    <h2 className="font-semibold">{title}</h2>
+                <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
+                    <h2 className="font-semibold text-lg">{title}</h2>
                     <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={onClose}
-                        className="text-gray-400 hover:text-white transition"
+                        className="text-muted-foreground hover:text-foreground rounded-full"
                     >
                         <X size={20} />
                     </Button>
                 </div>
 
                 {/* Content — scrollable */}
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                     {children}
                 </div>
 

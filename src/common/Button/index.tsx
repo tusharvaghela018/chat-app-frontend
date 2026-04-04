@@ -27,8 +27,7 @@ const Button: React.FC<ButtonProps> = ({
     ...props
 }) => {
     const isGlobalLoading = useSelector((state: RootState) => state.loading.isLoading)
-    const loading = localLoading || isGlobalLoading
-    const isDisabled = disabled || loading
+    const isDisabled = disabled || localLoading || isGlobalLoading
 
     const variants = {
         primary: "bg-primary text-primary-foreground hover:opacity-90",
@@ -74,16 +73,16 @@ const Button: React.FC<ButtonProps> = ({
             `}
             {...props}
         >
-            {loading && (
+            {localLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-inherit rounded-lg">
                     <Loader size="sm" />
                 </div>
             )}
             
-            <span className={`flex items-center gap-2 transition-opacity duration-200 ${loading ? "opacity-0" : "opacity-100"}`}>
-                {!loading && leftIcon}
+            <span className={`flex items-center gap-2 transition-opacity duration-200 ${localLoading ? "opacity-0" : "opacity-100"}`}>
+                {!localLoading && leftIcon}
                 {children}
-                {!loading && rightIcon}
+                {!localLoading && rightIcon}
             </span>
         </button>
     )

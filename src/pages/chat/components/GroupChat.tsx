@@ -334,7 +334,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                             <ChevronLeft size={24} />
                         </Button>
                     )}
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 text-purple-600 font-bold shadow-inner">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold shadow-inner overflow-hidden">
                         {group.avatar
                             ? <img src={group.avatar} className="h-full w-full rounded-xl object-cover" />
                             : <Users size={20} />
@@ -390,7 +390,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                             className={`flex ${isMine ? "justify-end" : "justify-start"} gap-2`}
                         >
                             {!isMine && (
-                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-600 font-bold text-[10px] mt-1 shadow-inner overflow-hidden">
+                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-[10px] mt-1 shadow-inner overflow-hidden">
                                     {msg.sender?.avatar
                                         ? <img src={msg.sender.avatar} className="h-full w-full object-cover" />
                                         : msg.sender?.name?.[0]?.toUpperCase()
@@ -476,12 +476,12 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                 width="w-full sm:w-80"
                 title="Group Info"
             >
-                <div className="space-y-8 px-2">
+                <div className="space-y-8">
                     {/* ── header info ── */}
-                    <div className="flex flex-col items-center text-center">
-                        <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-purple-100 text-purple-600 font-bold text-3xl shadow-xl mb-4">
+                    <div className="flex flex-col items-center text-center px-2">
+                        <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-primary/10 text-primary font-bold text-3xl shadow-xl mb-4 overflow-hidden border-2 border-primary/20">
                             {liveGroup.avatar
-                                ? <img src={liveGroup.avatar} className="h-full w-full rounded-3xl object-cover" />
+                                ? <img src={liveGroup.avatar} className="h-full w-full object-cover" />
                                 : <Users size={40} />
                             }
                         </div>
@@ -490,7 +490,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                     </div>
 
                     {/* ── description ── */}
-                    <div>
+                    <div className="px-2">
                         <div className="flex items-center justify-between mb-2">
                             <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">About</h3>
                             {canEditInfo && (
@@ -505,7 +505,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                     </div>
 
                     {/* ── members list ── */}
-                    <div>
+                    <div className="px-2">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">
                                 Members ({groupDetail?.members?.length || memberCount})
@@ -526,9 +526,9 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                             {groupDetail?.members?.map((m: IGroupMember) => (
                                 <div key={m.id} className="flex items-center gap-3 py-2 px-3 rounded-xl transition-colors hover:bg-muted/50 group/member">
                                     <div className="relative flex-shrink-0">
-                                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100 text-purple-600 font-bold text-xs shadow-inner">
+                                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-xs shadow-inner overflow-hidden border border-primary/20">
                                             {m.user?.avatar
-                                                ? <img src={m.user.avatar} className="h-full w-full rounded-xl object-cover" />
+                                                ? <img src={m.user.avatar} className="h-full w-full object-cover" />
                                                 : m.user?.name?.[0]?.toUpperCase()
                                             }
                                         </div>
@@ -566,7 +566,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
 
                     {/* ── invite ── */}
                     {canShareLink && (
-                        <div>
+                        <div className="px-2">
                              <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground mb-3">Invite Link</h3>
                              {!inviteLink ? (
                                 <Button 
@@ -594,7 +594,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
 
                     {/* ── settings ── */}
                     {isAdmin && (
-                        <div>
+                        <div className="px-2">
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">Permissions</h3>
                                 <button onClick={() => setShowSettings(true)} className="text-xs font-bold text-primary hover:underline">Edit</button>
@@ -617,7 +617,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                     )}
 
                     {/* ── danger zone ── */}
-                    <div className="pt-4 border-t">
+                    <div className="pt-4 border-t px-2">
                          <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-destructive mb-3">Danger Zone</h3>
                          <div className="space-y-2">
                             {isAdmin && liveGroup.join_mode === "approval" && (
@@ -636,7 +636,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                                 variant="ghost"
                                 fullWidth
                                 onClick={() => setShowLeaveConfirm(true)}
-                                className="justify-between rounded-xl h-11 px-4 text-amber-600 hover:bg-amber-50 border border-amber-200"
+                                className="justify-between rounded-xl h-11 px-4 text-orange-500 hover:bg-orange-500/10 border border-orange-500/20"
                             >
                                 <span className="flex items-center gap-2 font-bold text-sm"><LogOut size={16} /> Leave Group</span>
                                 <ChevronRight size={14} />

@@ -76,13 +76,13 @@ const AddMemberModal = ({ open, onClose, groupId }: Props) => {
                 />
 
                 {errors.user && (
-                    <p className="text-sm text-red-500">{errors.user.message}</p>
+                    <p className="text-xs font-medium text-destructive mt-1 ml-0.5">{errors.user.message}</p>
                 )}
 
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-3 pt-4">
                     <Button
                         type="button"
-                        color="gray"
+                        variant="secondary"
                         fullWidth
                         onClick={handleClose}
                         disabled={isPending}

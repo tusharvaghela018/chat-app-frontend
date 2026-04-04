@@ -64,11 +64,11 @@ const ResetPassword = () => {
 
     if (!token) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+            <div className="min-h-screen bg-background flex items-center justify-center px-4">
                 <div className="w-full max-w-md text-center">
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                        <h1 className="text-2xl font-semibold text-gray-900 mb-2">Invalid Link</h1>
-                        <p className="text-gray-500 mb-6">The password reset link is invalid or has expired.</p>
+                    <div className="bg-card rounded-2xl shadow-sm border border-border p-8">
+                        <h1 className="text-2xl font-semibold text-foreground mb-2">Invalid Link</h1>
+                        <p className="text-muted-foreground mb-6">The password reset link is invalid or has expired.</p>
                         <Button onClick={() => navigate(ROUTES.LOGIN.path)} fullWidth>
                             Back to Login
                         </Button>
@@ -79,22 +79,22 @@ const ResetPassword = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="min-h-screen bg-background flex items-center justify-center px-4">
             <div className="w-full max-w-md">
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                <div className="bg-card rounded-2xl shadow-sm border border-border p-8">
                     {/* Header */}
                     <div className="mb-8 text-center">
-                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 mb-4">
-                            <Lock size={22} className="text-white" />
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary mb-4">
+                            <Lock size={22} className="text-primary-foreground" />
                         </div>
-                        <h1 className="text-2xl font-semibold text-gray-900">Reset Password</h1>
-                        <p className="text-sm text-gray-500 mt-1">Enter your new password below</p>
+                        <h1 className="text-2xl font-semibold text-foreground">Reset Password</h1>
+                        <p className="text-sm text-muted-foreground mt-1">Enter your new password below</p>
                     </div>
 
                     {/* Root error */}
                     {errors.root && (
-                        <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200">
-                            <p className="text-sm text-red-600">{errors.root.message}</p>
+                        <div className="mb-4 px-4 py-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                            <p className="text-sm text-destructive">{errors.root.message}</p>
                         </div>
                     )}
 

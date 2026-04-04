@@ -25,24 +25,24 @@ const ConfirmDialog: React.FC<Props> = ({
     variant = "danger",
     isLoading = false,
 }) => {
-    const colorMap = {
-        danger: "red",
-        warning: "yellow",
-        info: "blue",
+    const variantMap: Record<string, "danger" | "primary" | "secondary"> = {
+        danger: "danger",
+        warning: "primary", // Or I could add a warning variant to Button
+        info: "primary",
     }
 
-    const color = colorMap[variant]
+    const buttonVariant = variantMap[variant]
 
     return (
-        <Modal open={open} onClose={onClose} title={title}>
-            <div className="space-y-4">
+        <Modal open={open} onClose={onClose} title={title} loading={isLoading}>
+            <div className="space-y-6">
 
-                <p className="text-sm text-gray-600">{message}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{message}</p>
 
                 <div className="flex gap-3 pt-2">
                     <Button
                         type="button"
-                        color="gray"
+                        variant="secondary"
                         fullWidth
                         onClick={onClose}
                         disabled={isLoading}
@@ -51,7 +51,7 @@ const ConfirmDialog: React.FC<Props> = ({
                     </Button>
                     <Button
                         type="button"
-                        color={color}
+                        variant={buttonVariant}
                         fullWidth
                         loading={isLoading}
                         onClick={onConfirm}
