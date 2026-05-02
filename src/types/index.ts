@@ -1,9 +1,13 @@
 export interface IUser {
     id: number
     name: string
+    username: string
     avatar?: string
     is_online?: boolean
     email?: string
+    public_key?: string
+    encrypted_vault?: string
+    vault_salt?: string
 }
 
 export interface IGroupSettings {
@@ -32,8 +36,10 @@ export interface IGroupMember {
     user?: {
         id: number
         name: string
+        username: string
         avatar: string | null
         is_online: boolean
+        public_key?: string
     }
 }
 

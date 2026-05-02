@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy, Send, ChevronLeft, X } from "lucide-react"
+import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy, Send, ChevronLeft, X, Lock } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
 import { useGetApi, useDeleteApi, usePatchApi, usePostApi } from "@/hooks/api"
@@ -14,6 +14,15 @@ import EditGroupModal from "@/pages/chat/components/group/EditGroupModal"
 import JoinRequestsModal from "@/pages/chat/components/group/JoinRequestsModal"
 import { useGroupChat, type IGroupMessage } from "@/pages/chat/hooks"
 import { useSocket } from "@/hooks/socket"
+import { 
+    encryptGroupPayload, 
+    decryptGroupPayload, 
+    generateGroupKey, 
+    encryptGroupKeyForMember, 
+    decryptGroupKey, 
+    getSessionKeys, 
+    type EncryptedMessage 
+} from "@/utils/crypto"
 
 import Input from "@/common/Input"
 
@@ -118,6 +127,7 @@ const MemberMenu = ({
 const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => {
     const authUser = useSelector(getUser);
     const socket = useSocket();
+    const myKeys = getSessionKeys()
 
     const [input, setInput] = useState<string>("");
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -158,11 +168,51 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         },
     })
 
-    // ── load initial messages from API ────────────────────────────────────
-    const { data: messagesData } = useGetApi(
+    const { data: liveData } = useGetApi<{ group: IGroup }>(
+        `/groups/${group.id}`,
+        undefined,
+        {
+            queryKey: `group-${group.id}`,
+            enabled: true,
+        }
+    )
+
+    const groupDetail = liveData?.data?.group as IGroup | undefined
+
+    // Helper to decrypt messages
+    const decryptMessage = (msg: IGroupMessage) => {
+        if (msg.type === "system") return msg.content
+        try {
+            const parsed = JSON.parse(msg.content) as EncryptedMessage
+            if (parsed.c && parsed.n && myKeys && msg.encrypted_keys) {
+                // Find my encrypted group key
+                const myEncryptedKey = msg.encrypted_keys[authUser?.id as number]
+                if (!myEncryptedKey) return null
+
+                // Get sender's public key (from groupDetail members)
+                const sender = groupDetail?.members?.find(m => m.user?.id === msg.sender_id)
+                const senderPublicKey = sender?.user?.public_key
+                if (!senderPublicKey) return null
+
+                // 1. Decrypt the Group Key
+                const groupKey = decryptGroupKey(myEncryptedKey, senderPublicKey, myKeys.secretKey)
+                if (!groupKey) return null
+
+                // 2. Decrypt the payload
+                const decrypted = decryptGroupPayload(parsed, groupKey)
+                return decrypted // returns string or null
+            }
+            return msg.content
+        } catch (e) {
+            return msg.content // Not encrypted or fallback
+        }
+    }
+
+    // ── load messages ────────────────────────────────────
+    const { data: messagesData, isFetching, isSuccess } = useGetApi(
         `/groups/${group.id}/messages`,
         undefined,
-        { queryKey: `group-messages-${group.id}`, enabled: true }
+        { queryKey: `group-messages-${group.id}`, enabled: true, staleTime: 0 }
     )
 
     useEffect(() => {
@@ -196,23 +246,37 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     // ── send ──────────────────────────────────────────────────────────────
     const handleSend = () => {
         if (!input.trim()) return
-        sendMessage(input)
+
+        let finalContent = input
+        let encryptedKeys: Record<number, EncryptedMessage> = {}
+
+        const membersWithPK = groupDetail?.members?.filter(m => !!m.user?.public_key)
+
+        if (membersWithPK?.length && myKeys) {
+            // 1. Generate Group Key
+            const groupKey = generateGroupKey()
+
+            // 2. Encrypt Payload
+            const encryptedPayload = encryptGroupPayload(input, groupKey)
+            finalContent = JSON.stringify(encryptedPayload)
+
+            // 3. Encrypt Group Key for each member
+            membersWithPK.forEach(member => {
+                if (member.user?.id && member.user.public_key) {
+                    encryptedKeys[member.user.id] = encryptGroupKeyForMember(
+                        groupKey,
+                        member.user.public_key,
+                        myKeys.secretKey
+                    )
+                }
+            })
+        }
+
+        sendMessage(finalContent, encryptedKeys)
         emitTypingStop()
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
         setInput("")
     }
-
-
-    const { data: liveData } = useGetApi<{ group: IGroup }>(
-        `/groups/${group.id}`,
-        undefined,
-        {
-            queryKey: `group-${group.id}`,
-            enabled: true,
-        }
-    )
-
-    const groupDetail = liveData?.data?.group as IGroup | undefined
 
     const liveGroup = liveData?.data?.group ?? group
     const myRole = liveGroup.members?.find(
@@ -342,7 +406,12 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                         }
                     </div>
                     <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-foreground">{liveGroup.name}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-bold text-foreground">{liveGroup.name}</p>
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-green-500/10 text-[9px] font-bold text-green-600 border border-green-500/20 uppercase tracking-tighter">
+                                <Lock size={8} strokeWidth={3} /> Encrypted
+                            </div>
+                        </div>
                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                             {memberCount} member{memberCount !== 1 ? "s" : ""}
                         </p>
@@ -375,67 +444,80 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             </div>
 
             {/* messages area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50">
-                {messages.length === 0 && (
-                    <div className="flex h-full flex-col items-center justify-center space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50 transition-all duration-300">
+                {(isFetching && messages.length === 0) ? (
+                    <div className="flex-1 space-y-4 animate-in fade-in duration-500">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                            <div key={i} className={`flex ${i % 3 === 0 ? "justify-end" : "justify-start"}`}>
+                                <div className={`h-12 w-2/3 max-w-[250px] rounded-2xl bg-muted/40 animate-pulse ${i % 3 === 0 ? "rounded-br-none" : "rounded-bl-none"}`} />
+                            </div>
+                        ))}
+                    </div>
+                ) : (isSuccess && messages.length === 0) ? (
+                    <div className="flex h-full flex-col items-center justify-center space-y-4 animate-in fade-in duration-500">
                         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
                             <MessageSquare size={32} />
                         </div>
                         <p className="text-sm font-medium text-muted-foreground">No messages yet — say hello 👋</p>
                     </div>
-                )}
+                ) : (
+                    <>
+                        {messages.map((msg: IGroupMessage) => {
+                            const isMine = msg.sender_id === authUser?.id
+                            const isSystem = msg.type === "system"
 
-                {messages.map((msg: IGroupMessage) => {
-                    const isMine = msg.sender_id === authUser?.id
-                    const isSystem = msg.type === "system"
+                            if (isSystem) {
+                                return (
+                                    <div key={msg.id} className="flex justify-center my-2 animate-in fade-in duration-300">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-muted px-4 py-1 rounded-full border border-border">
+                                            {msg.content}
+                                        </span>
+                                    </div>
+                                )
+                            }
 
-                    if (isSystem) {
-                        return (
-                            <div key={msg.id} className="flex justify-center my-2">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-muted px-4 py-1 rounded-full border border-border">
-                                    {msg.content}
-                                </span>
-                            </div>
-                        )
-                    }
+                            const decryptedContent = decryptMessage(msg)
+                            if (decryptedContent === null) return null
 
-                    return (
-                        <div
-                            key={msg.id}
-                            className={`flex ${isMine ? "justify-end" : "justify-start"} gap-2`}
-                        >
-                            {!isMine && (
-                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-[10px] mt-1 shadow-inner overflow-hidden">
-                                    {msg.sender?.avatar
-                                        ? <img src={msg.sender.avatar} className="h-full w-full object-cover" />
-                                        : msg.sender?.name?.[0]?.toUpperCase()
-                                    }
-                                </div>
-                            )}
-
-                            <div className="max-w-[80%] sm:max-w-md">
-                                {!isMine && (
-                                    <p className="text-[10px] font-bold text-muted-foreground mb-1 ml-1 truncate">
-                                        {msg.sender?.name}
-                                    </p>
-                                )}
-                                <div className={`relative px-4 py-2.5 rounded-2xl text-sm break-words shadow-sm
-                                    ${isMine
-                                        ? "bg-primary text-primary-foreground rounded-br-none"
-                                        : "bg-card text-foreground rounded-bl-none border border-border"
-                                    }`}
+                            return (
+                                <div
+                                    key={msg.id}
+                                    className={`flex ${isMine ? "justify-end" : "justify-start"} gap-2 animate-in slide-in-from-bottom-2 duration-300`}
                                 >
-                                    {msg.content}
-                                    <div className={`text-[10px] tabular-nums mt-1 text-right 
-                                        ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                                    >
-                                        {new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {!isMine && (
+                                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-[10px] mt-1 shadow-inner overflow-hidden">
+                                            {msg.sender?.avatar
+                                                ? <img src={msg.sender.avatar} className="h-full w-full object-cover" />
+                                                : msg.sender?.name?.[0]?.toUpperCase()
+                                            }
+                                        </div>
+                                    )}
+
+                                    <div className="max-w-[80%] sm:max-w-md">
+                                        {!isMine && (
+                                            <p className="text-[10px] font-bold text-muted-foreground mb-1 ml-1 truncate">
+                                                {msg.sender?.name}
+                                            </p>
+                                        )}
+                                        <div className={`relative px-4 py-2.5 rounded-2xl text-sm break-words shadow-sm
+                                            ${isMine
+                                                ? "bg-primary text-primary-foreground rounded-br-none"
+                                                : "bg-card text-foreground rounded-bl-none border border-border"
+                                            }`}
+                                        >
+                                            {decryptedContent}
+                                            <div className={`text-[10px] tabular-nums mt-1 text-right 
+                                                ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                                            >
+                                                {new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    )
-                })}
+                            )
+                        })}
+                    </>
+                )}
 
                 {/* typing indicator */}
                 {typingUsers.length > 0 && (

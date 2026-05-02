@@ -6,7 +6,7 @@ import Button from "@/common/Button"
 import type { IGroup, IUser } from "@/types"
 import { ROUTES } from "@/constants/routes"
 
-type Tab = "direct" | "groups"
+type Tab = "dm" | "groups"
 
 interface Props {
     selectedUserId: number | null
@@ -30,7 +30,7 @@ const Sidebar = ({ selectedUserId, selectedGroupId, onSelectUser, onSelectGroup,
                     variant="ghost"
                     size="sm"
                     onClick={() => navigate(ROUTES.HOME.path)}
-                    className="text-muted-foreground hover:text-primary"
+                    className="text-muted-foreground hover:text-primary transition-all duration-200"
                 >
                     <ArrowLeft size={16} className="mr-1" />
                     Home
@@ -41,14 +41,14 @@ const Sidebar = ({ selectedUserId, selectedGroupId, onSelectUser, onSelectGroup,
             <div className="px-4 py-2 flex-shrink-0">
                 <div className="flex p-1 bg-muted/50 rounded-xl border border-border">
                     <button
-                        onClick={() => onTabChange("direct")}
+                        onClick={() => onTabChange("dm")}
                         className={`flex-1 rounded-lg py-2.5 text-sm font-bold transition-all duration-200
-                            ${activeTab === "direct"
+                            ${activeTab === "dm"
                                 ? "bg-card text-primary shadow-sm ring-1 ring-black/5"
                                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
                             }`}
                     >
-                        Direct
+                        DM
                     </button>
                     <button
                         onClick={() => onTabChange("groups")}
@@ -65,7 +65,7 @@ const Sidebar = ({ selectedUserId, selectedGroupId, onSelectUser, onSelectGroup,
 
             {/* list container */}
             <div className="flex-1 overflow-hidden">
-                {activeTab === "direct" ? (
+                {activeTab === "dm" ? (
                     <DirectList
                         selectedUserId={selectedUserId}
                         onSelectUser={onSelectUser}

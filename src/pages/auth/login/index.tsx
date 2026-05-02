@@ -21,7 +21,17 @@ interface LoginForm {
 
 interface LoginResponse {
     token: string;
-    user: { id: number; name: string; is_online: boolean; avatar?: string };
+    user: { 
+        id: number; 
+        name: string; 
+        username: string;
+        email: string;
+        is_online: boolean; 
+        avatar?: string;
+        public_key?: string;
+        encrypted_vault?: string;
+        vault_salt?: string;
+    };
 }
 
 const loginSchema = yup.object({
@@ -56,12 +66,17 @@ const Login = () => {
         {
             onSuccess: (response) => {
                 dispatch(setToken(response.data?.token || ""));
-                const { id, name, avatar, is_online } = { ...response.data?.user }
+                const { id, name, username, email, avatar, is_online, public_key, encrypted_vault, vault_salt } = { ...response.data?.user }
                 const userData = {
                     id: Number(id),
                     name: String(name),
+                    username: String(username),
+                    email: String(email),
                     avatar: String(avatar),
-                    is_online: is_online || false
+                    is_online: is_online || false,
+                    public_key,
+                    encrypted_vault,
+                    vault_salt
                 }
                 dispatch(setUser(userData))
                 navigate(ROUTES.DASHBOARD.path);

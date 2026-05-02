@@ -21,7 +21,17 @@ interface RegisterForm {
 
 interface RegisterResponse {
     token: string;
-    user: { id: number; name: string; avatar: string; is_online: boolean };
+    user: { 
+        id: number; 
+        name: string; 
+        username: string;
+        email: string;
+        avatar: string; 
+        is_online: boolean;
+        public_key?: string;
+        encrypted_vault?: string;
+        vault_salt?: string;
+    };
 }
 
 const registerSchema = yup.object({
@@ -60,12 +70,17 @@ const Register = () => {
         "/auth/register",
         {
             onSuccess: (response) => {
-                const { id, name, avatar, is_online } = response.data?.user ?? {};
+                const { id, name, username, email, avatar, is_online, public_key, encrypted_vault, vault_salt } = response.data?.user ?? {};
                 const userData = {
                     id: Number(id),
                     name: String(name),
+                    username: String(username),
+                    email: String(email),
                     avatar: String(avatar),
                     is_online: is_online || false,
+                    public_key,
+                    encrypted_vault,
+                    vault_salt
                 };
                 dispatch(setToken(response.data?.token || ""));
                 dispatch(setUser(userData));

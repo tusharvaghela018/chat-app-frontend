@@ -37,20 +37,20 @@ const Counter = ({ to, suffix = "" }: { to: number; suffix?: string }) => {
 };
 
 const STACK = [
+    { icon: <Lock size={15} />, label: "End-to-End Encryption" },
     { icon: <Lock size={15} />, label: "JWT Auth" },
     { icon: <ShieldCheck size={15} />, label: "Google OAuth 2.0" },
     { icon: <Zap size={15} />, label: "Passport.js" },
-    { icon: <ShieldCheck size={15} />, label: "Redux Persist" },
     { icon: <MessageSquare size={15} />, label: "Socket.IO Chat" },
     { icon: <Zap size={15} />, label: "React Hook Form" },
 ];
 
 const DONE = [
+    { icon: <Lock size={16} />, label: "End-to-End Encryption" },
     { icon: <Lock size={16} />, label: "JWT Authentication" },
     { icon: <Globe size={16} />, label: "Google OAuth 2.0" },
     { icon: <MessageSquare size={16} />, label: "Real-time Chat (1:1)" },
     { icon: <Users size={16} />, label: "Group Messaging" },
-    { icon: <ShieldCheck size={16} />, label: "Seen / Delivered Receipts" },
 ];
 
 const ROADMAP = [

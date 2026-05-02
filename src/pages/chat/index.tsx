@@ -14,7 +14,7 @@ const ChatPage = () => {
     const [selectedUser, setSelectedUser] = useState<IUser | null>(null)
     const [selectedGroup, setSelectedGroup] = useState<IGroup | null>(null)
     const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false)
-    const [activeTab, setActiveTab] = useState<"direct" | "groups" | "all">("direct")
+    const [activeTab, setActiveTab] = useState<"dm" | "groups" | "all">("dm")
     const [isSidebarOpen, setIsSidebarOpen] = useState(true)
 
     const location = useLocation()
@@ -44,7 +44,7 @@ const ChatPage = () => {
     const handleSelectUser = (user: IUser) => {
         setSelectedUser(user)
         setSelectedGroup(null)
-        setActiveTab("direct")
+        setActiveTab("dm")
         setIsSidebarOpen(false) // Close sidebar on mobile
     }
 
@@ -70,7 +70,7 @@ const ChatPage = () => {
     const handleOpenDM = (user: IUser) => {
         setSelectedUser(user)
         setSelectedGroup(null)
-        setActiveTab("direct")
+        setActiveTab("dm")
         setIsSidebarOpen(false)
     }
 
@@ -88,7 +88,7 @@ const ChatPage = () => {
                     onSelectUser={handleSelectUser}
                     onSelectGroup={handleSelectGroup}
                     onCreateGroup={() => setShowCreateGroup(true)}
-                    activeTab={activeTab === "all" ? "direct" : activeTab}
+                    activeTab={activeTab === "all" ? "dm" : activeTab}
                     onTabChange={(tab) => setActiveTab(tab)}
                 />
             </div>

@@ -47,12 +47,17 @@ const GoogleCallback = () => {
     // ── on success — store user and redirect ──────────────────────────────
     useEffect(() => {
         if (!isSuccess || !meData?.data) return
-        const { id, name, avatar, is_online } = { ...meData.data.user }
+        const { id, name, username, email, avatar, is_online, public_key, encrypted_vault, vault_salt } = { ...meData.data.user }
         const userData = {
             id: Number(id),
             name: String(name),
+            username: String(username),
+            email: String(email),
             avatar: String(avatar),
-            is_online: is_online || false
+            is_online: is_online || false,
+            public_key,
+            encrypted_vault,
+            vault_salt
         }
         dispatch(setUser(userData))
         toast.success("Logged in successfully.")

@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Search } from "lucide-react"
-import { useSelector } from "react-redux"
-import type { RootState } from "@/redux/store"
 import { useGetApi } from "@/hooks/api"
 import useDebounce from "@/hooks/debounce"
 import type { IUser } from "@/types"
@@ -28,15 +26,19 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
 
     const debouncedSearch = useDebounce(search, 400)
 
-    // reset page when search changes
+    // reset page and clear list when search changes
     useEffect(() => {
         setPage(1)
+        setUserList([])
     }, [debouncedSearch])
 
     const { data, isFetching } = useGetApi<UserResponse>(
         "/users",
         { page, limit: 20, ...(debouncedSearch ? { search: debouncedSearch } : {}) },
-        { queryKey: `users-${debouncedSearch}` }
+        { 
+            queryKey: `users-${debouncedSearch}`,
+            staleTime: 0 
+        }
     )
 
     const hasMore = (data?.data as any)?.hasMore ?? false
@@ -64,7 +66,6 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
         return () => observer.disconnect()
     }, [handleObserver])
 
-    const isGlobalLoading = useSelector((state: RootState) => state.loading.isLoading)
 
     return (
         <div className="flex flex-col h-full bg-card">
@@ -133,9 +134,14 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
                     ))}
                 </div>
 
-                <div ref={bottomRef} className="py-6 flex justify-center">
+                <div ref={bottomRef} className="py-2 px-2">
                     {isFetching && userList.length > 0 && (
-                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                         <div className="flex items-center gap-3 p-3 rounded-2xl animate-pulse bg-muted/30">
+                            <div className="w-11 h-11 bg-muted/50 rounded-xl flex-shrink-0" />
+                            <div className="flex-1 space-y-2">
+                                <div className="h-3 bg-muted/50 rounded w-1/2" />
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>

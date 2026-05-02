@@ -61,11 +61,10 @@ function Dashboard() {
                 </div>
                 <div className="flex gap-3">
                     <Link to={ROUTES.CHAT.path}>
-                        <Button variant="outline" className="rounded-xl">View Messages</Button>
+                        <Button variant="primary" className="rounded-xl shadow-lg shadow-primary/20 px-8">
+                            View Messages <MessageSquare size={18} className="ml-2" />
+                        </Button>
                     </Link>
-                    <Button variant="primary" className="rounded-xl shadow-lg shadow-primary/20">
-                        New Message
-                    </Button>
                 </div>
             </header>
 
@@ -140,9 +139,6 @@ function Dashboard() {
                                     <p className="text-sm text-muted-foreground">No recent activity found.</p>
                                 </div>
                             )}
-                        </div>
-                        <div className="border-t p-3 text-center">
-                            <button className="text-xs font-semibold text-primary hover:underline">View all activity</button>
                         </div>
                     </div>
                 </div>

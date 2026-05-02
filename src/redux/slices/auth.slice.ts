@@ -4,8 +4,13 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 interface User {
     id: number
     name: string
-    is_online: boolean,
+    username: string
+    email: string
+    is_online: boolean
     avatar: string
+    public_key?: string
+    encrypted_vault?: string
+    vault_salt?: string
 }
 
 interface AuthSlice {

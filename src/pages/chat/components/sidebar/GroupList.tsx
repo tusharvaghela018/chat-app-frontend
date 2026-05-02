@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Users, Search } from "lucide-react"
-import { useSelector } from "react-redux"
-import type { RootState } from "@/redux/store"
 import { useGetApi } from "@/hooks/api"
 import useDebounce from "@/hooks/debounce"
 import type { IGroup } from "@/types"
@@ -36,12 +34,16 @@ const GroupList = ({ selectedGroupId, onSelectGroup }: Props) => {
 
     useEffect(() => {
         setPage(1)
+        setGroupList([])
     }, [debouncedSearch])
 
     const { data, isFetching } = useGetApi<GroupResponse>(
         "/groups",
         { page, limit: 20, ...(debouncedSearch ? { search: debouncedSearch } : {}) },
-        { queryKey: `groups-${debouncedSearch}` }
+        { 
+            queryKey: `groups-${debouncedSearch}`,
+            staleTime: 0 
+        }
     )
 
     const hasMore = (data?.data as any)?.hasMore ?? false
@@ -90,8 +92,6 @@ const GroupList = ({ selectedGroupId, onSelectGroup }: Props) => {
         }
     }, [socket])
 
-    const isGlobalLoading = useSelector((state: RootState) => state.loading.isLoading)
-
     return (
         <div className="flex flex-col h-full bg-card">
 
@@ -101,16 +101,15 @@ const GroupList = ({ selectedGroupId, onSelectGroup }: Props) => {
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
                     <input
                         value={search}
-                        disabled={isGlobalLoading}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Search groups..."
-                        className="w-full pl-10 pr-4 py-2 text-sm bg-background border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full pl-10 pr-4 py-2 text-sm bg-background border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
                     />
                 </div>
             </div>
 
             {/* list */}
-            <div className={`flex-1 overflow-y-auto px-2 custom-scrollbar ${isGlobalLoading ? "pointer-events-none opacity-80" : ""}`}>
+            <div className="flex-1 overflow-y-auto px-2 custom-scrollbar">
 
                 {isFetching && groupList.length === 0 && <ListSkeleton />}
 
@@ -155,9 +154,14 @@ const GroupList = ({ selectedGroupId, onSelectGroup }: Props) => {
                     ))}
                 </div>
 
-                <div ref={bottomRef} className="py-6 flex justify-center">
+                <div ref={bottomRef} className="py-2 px-2">
                     {isFetching && groupList.length > 0 && (
-                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        <div className="flex items-center gap-3 p-3 rounded-2xl animate-pulse bg-muted/30">
+                            <div className="w-11 h-11 bg-muted/50 rounded-xl flex-shrink-0" />
+                            <div className="flex-1 space-y-2">
+                                <div className="h-3 bg-muted/50 rounded w-1/2" />
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>

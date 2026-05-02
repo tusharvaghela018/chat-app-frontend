@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Socket } from "socket.io-client"
 import { CHAT_EVENTS } from "@/pages/chat/constants"
 import { GROUP_EVENTS } from "@/pages/chat/constants"
+import type { EncryptedMessage } from "@/utils/crypto"
 
 
 interface IMessage {
@@ -145,6 +146,7 @@ export interface IGroupMessage {
     sender_id: number | null
     content: string
     type: "text" | "system"
+    encrypted_keys?: Record<number, EncryptedMessage>
     created_at: string
     sender?: {
         id: number
@@ -242,9 +244,9 @@ export const useGroupChat = ({ socket, groupId, onMemberJoined, onMemberLeft }: 
     }, [groupId])
 
     // ── send message ──────────────────────────────────────────────────────
-    const sendMessage = (content: string) => {
+    const sendMessage = (content: string, encrypted_keys?: any) => {
         if (!socket || !content.trim()) return
-        socket.emit(GROUP_EVENTS.SEND_MESSAGE, { groupId, content })
+        socket.emit(GROUP_EVENTS.SEND_MESSAGE, { groupId, content, encrypted_keys })
     }
 
     // ── mark seen ─────────────────────────────────────────────────────────

@@ -28,12 +28,17 @@ const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
 
     useEffect(() => {
         if (isSuccess && meData?.data?.user) {
-            const { id, name, avatar, is_online } = meData.data.user
+            const { id, name, username, email, avatar, is_online, public_key, encrypted_vault, vault_salt } = meData.data.user
             dispatch(setUser({
                 id: Number(id),
                 name: String(name),
+                username: String(username),
+                email: String(email),
                 avatar: String(avatar),
-                is_online: is_online || false
+                is_online: is_online || false,
+                public_key,
+                encrypted_vault,
+                vault_salt
             }))
         }
     }, [isSuccess, meData, dispatch])
