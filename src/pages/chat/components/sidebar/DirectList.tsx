@@ -73,15 +73,14 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
                     <input
                         value={search}
-                        disabled={isGlobalLoading}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Search users..."
-                        className="w-full pl-10 pr-4 py-2 text-sm bg-background border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full pl-10 pr-4 py-2 text-sm bg-background border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
                     />
                 </div>
             </div>
 
-            <div className={`flex-1 overflow-y-auto px-2 custom-scrollbar ${isGlobalLoading ? "pointer-events-none opacity-80" : ""}`}>
+            <div className="flex-1 overflow-y-auto px-2 custom-scrollbar">
 
                 {isFetching && userList.length === 0 && <ListSkeleton />}
 
@@ -121,6 +120,10 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
                             </div>
                             <div className="min-w-0 flex-1">
                                 <p className="text-sm font-bold truncate">{user.name}</p>
+                                <p className={`text-[11px] font-medium truncate mb-0.5
+                                    ${selectedUserId === user.id ? "text-primary-foreground/80" : "text-muted-foreground/80"}`}>
+                                    @{user.username}
+                                </p>
                                 <p className={`text-[10px] font-medium uppercase tracking-wider
                                     ${selectedUserId === user.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
                                     {user.is_online ? "Online" : "Offline"}
