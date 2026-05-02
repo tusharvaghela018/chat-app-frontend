@@ -126,7 +126,11 @@ const ChatPage = () => {
 
                 {selectedUser && (
                     <div className="flex-1 flex flex-col h-full overflow-hidden">
-                        <DirectChat user={selectedUser} onBack={() => setIsSidebarOpen(true)} />
+                        <DirectChat 
+                            user={selectedUser} 
+                            onBack={() => setIsSidebarOpen(true)} 
+                            onClose={() => setSelectedUser(null)}
+                        />
                     </div>
                 )}
 
@@ -137,6 +141,7 @@ const ChatPage = () => {
                             onGroupLeft={handleGroupLeft}
                             onOpenDM={handleOpenDM}
                             onBack={() => setIsSidebarOpen(true)}
+                            onClose={() => setSelectedGroup(null)}
                         />
                     </div>
                 )}

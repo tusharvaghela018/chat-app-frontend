@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy, Send, ChevronLeft } from "lucide-react"
+import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy, Send, ChevronLeft, X } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
 import { useGetApi, useDeleteApi, usePatchApi, usePostApi } from "@/hooks/api"
@@ -22,6 +22,7 @@ interface Props {
     onGroupLeft: () => void
     onOpenDM: (user: IUser) => void
     onBack?: () => void
+    onClose?: () => void
 }
 
 // three dots menu for each member
@@ -114,7 +115,7 @@ const MemberMenu = ({
     )
 }
 
-const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
+const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => {
     const authUser = useSelector(getUser);
     const socket = useSocket();
 
@@ -329,7 +330,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                             variant="ghost" 
                             size="icon" 
                             onClick={onBack} 
-                            className="mr-1 lg:hidden rounded-full"
+                            className="mr-1 rounded-full"
                         >
                             <ChevronLeft size={24} />
                         </Button>
@@ -348,15 +349,29 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack }: Props) => {
                     </div>
                 </div>
 
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowInfo((prev) => !prev)}
-                    className={`rounded-full transition-all duration-200
-                        ${showInfo ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                    <Info size={20} />
-                </Button>
+                <div className="flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowInfo((prev) => !prev)}
+                        className={`rounded-full transition-all duration-200
+                            ${showInfo ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                        <Info size={20} />
+                    </Button>
+                    {onClose && (
+                         <div className="border-l ml-1 pl-1">
+                             <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={onClose} 
+                                className="text-muted-foreground hover:text-destructive transition-colors rounded-full"
+                            >
+                                <X size={20} />
+                            </Button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* messages area */}

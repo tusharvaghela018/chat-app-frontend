@@ -8,6 +8,7 @@ interface IMessage {
     id: number
     content: string
     sender_id: number
+    receiver_id: number
     conversation_id: number
     created_at: string
     is_seen?: boolean
@@ -33,6 +34,7 @@ interface UseChatReturn {
 export const useChat = ({
     socket,
     selectedUserId,
+    currentUserId,
 }: UseChatProps): UseChatReturn => {
     const [messages, setMessages] = useState<IMessage[]>([])
     const [isTyping, setIsTyping] = useState(false)
@@ -43,6 +45,7 @@ export const useChat = ({
     // keep ref in sync — used inside socket closures to avoid stale state
     useEffect(() => {
         selectedUserRef.current = selectedUserId
+        activeConvRef.current = null // Reset conversation ID when switching users
         setIsTyping(false)  // reset typing when switching users
     }, [selectedUserId])
 
@@ -51,6 +54,17 @@ export const useChat = ({
 
         // ── receive_message ───────────────────────────────────────────────
         const onReceiveMessage = (msg: IMessage) => {
+            // If activeConvRef is null, it might be the first message of a new conversation
+            if (activeConvRef.current === null) {
+                const isRelevant = 
+                    (msg.sender_id === selectedUserRef.current && msg.receiver_id === currentUserId) ||
+                    (msg.sender_id === currentUserId && msg.receiver_id === selectedUserRef.current);
+                
+                if (isRelevant) {
+                    activeConvRef.current = msg.conversation_id;
+                }
+            }
+
             // wrong conversation is open — ignore completely, do NOT mark seen
             if (msg.conversation_id !== activeConvRef.current) return
 

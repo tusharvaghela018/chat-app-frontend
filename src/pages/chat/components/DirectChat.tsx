@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useSelector } from "react-redux"
-import { User, Send, ChevronLeft, Phone, Video, MoreVertical, MessageSquare } from "lucide-react"
+import { User, Send, ChevronLeft, Phone, Video, MoreVertical, MessageSquare, X } from "lucide-react"
 import { useGetApi } from "@/hooks/api"
 import { useSocket } from "@/hooks/socket"
 import { useChat } from "@/pages/chat/hooks"
@@ -14,6 +14,7 @@ interface IMessage {
     id: number
     content: string
     sender_id: number
+    receiver_id: number
     conversation_id: number
     created_at: string
     is_seen?: boolean
@@ -22,9 +23,10 @@ interface IMessage {
 interface Props {
     user: IUser
     onBack?: () => void
+    onClose?: () => void
 }
 
-const DirectChat = ({ user, onBack }: Props) => {
+const DirectChat = ({ user, onBack, onClose }: Props) => {
     const authUser = useSelector(getUser)
     const socket = useSocket()
 
@@ -47,37 +49,40 @@ const DirectChat = ({ user, onBack }: Props) => {
         currentUserId: authUser?.id ?? null,
     })
 
-    // ── load messages ─────────────────────────────────────────────────────
+    // ── load messages & sync state ────────────────────────────────────────
     const { data: messageData } = useGetApi<IMessage[]>(
         `/message/${user.id}`,
         undefined,
-        { enabled: !!user.id }
+        { 
+            queryKey: `messages-${user.id}`,
+            enabled: !!user.id 
+        }
     )
 
     useEffect(() => {
-        if (!messageData?.data) return
-
-        const msgs = Array.isArray(messageData.data)
-            ? messageData.data
-            : (messageData.data as any)?.messages ?? []
-
-        setMessages(msgs)
-
-        const conversationId = msgs[0]?.conversation_id ?? null
-        activeConvRef.current = conversationId
-
-        if (conversationId && socket) {
-            emitMarkSeen(conversationId, user.id)
-        }
-    }, [messageData, socket])
-
-    // ── reset when user changes ───────────────────────────────────────────
-    useEffect(() => {
+        // 1. Always clear current messages and input when user ID changes
+        // This prevents seeing old user's messages while new ones load
         setMessages([])
         setInput("")
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
         emitTypingStop(user.id)
-    }, [user.id])
+
+        // 2. If we have data (either cached or fresh), populate it
+        if (messageData?.data) {
+            const msgs = Array.isArray(messageData.data)
+                ? messageData.data
+                : (messageData.data as any)?.messages ?? []
+
+            setMessages(msgs)
+
+            const conversationId = msgs[0]?.conversation_id ?? null
+            activeConvRef.current = conversationId
+
+            if (conversationId && socket) {
+                emitMarkSeen(conversationId, user.id)
+            }
+        }
+    }, [user.id, messageData, socket]) // Trigger on user change OR data change
 
     // ── auto scroll ───────────────────────────────────────────────────────
     useEffect(() => {
@@ -157,6 +162,18 @@ const DirectChat = ({ user, onBack }: Props) => {
                     <Button variant="ghost" size="icon" className="text-muted-foreground rounded-full">
                         <MoreVertical size={18} />
                     </Button>
+                    {onClose && (
+                        <div className="border-l ml-1 pl-1">
+                             <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={onClose} 
+                                className="text-muted-foreground hover:text-destructive transition-colors rounded-full"
+                            >
+                                <X size={20} />
+                            </Button>
+                        </div>
+                    )}
                 </div>
             </div>
 
