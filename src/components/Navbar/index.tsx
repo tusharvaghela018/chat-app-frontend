@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
     MessageSquare, LayoutDashboard, LogOut,
     ChevronDown, ShieldCheck, Bell,
-    Home, Camera, Menu, X
+    Home, Camera, Menu, X, User as UserIcon
 } from "lucide-react";
 import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
@@ -31,9 +31,6 @@ export default function Navbar() {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     
     const dropRef = useRef<HTMLDivElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const { mutate: updateProfile, isPending: isUpdating } = usePatchApi<IUser>("/users");
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -53,24 +50,6 @@ export default function Navbar() {
         await clearLocalSecrets();
         dispatch(clearAuth());
         navigate("/");
-    };
-
-    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !user?.id) return;
-
-        const formData = new FormData();
-        formData.append("avatar", file);
-
-        updateProfile({ body: formData as any }, {
-            onSuccess: () => {
-                queryClient.invalidateQueries({
-                    queryKey: ['get-me'],
-                    exact: false,
-                    refetchType: 'all'
-                });
-            }
-        });
     };
 
     const initials = user?.name 
@@ -152,14 +131,14 @@ export default function Navbar() {
                                     </div>
                                 </div>
                                 
-                                <button
+                                <Link
+                                    to={ROUTES.PROFILE.path}
                                     className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={isUpdating}
+                                    onClick={() => setIsProfileOpen(false)}
                                 >
-                                    <Camera size={16} />
-                                    {isUpdating ? "Updating..." : "Change Avatar"}
-                                </button>
+                                    <UserIcon size={16} />
+                                    My Profile
+                                </Link>
                                 
                                 <div className="sm:hidden">
                                     <ThemeToggle />
@@ -172,8 +151,6 @@ export default function Navbar() {
                                     <LogOut size={16} />
                                     Sign out
                                 </button>
-                                
-                                <input type="file" ref={fileInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
                             </div>
                         )}
                     </div>
