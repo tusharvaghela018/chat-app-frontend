@@ -11,6 +11,7 @@ import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import ThemeToggle from "@/common/ThemeToggle";
 import { usePatchApi } from "@/hooks/api";
+import { clearLocalSecrets } from "@/utils/indexeddb";
 import type { IUser } from "@/types";
 
 const NAV_LINKS = [
@@ -48,7 +49,8 @@ export default function Navbar() {
         setIsMenuOpen(false);
     }, [location.pathname]);
 
-    const logout = () => {
+    const logout = async () => {
+        await clearLocalSecrets();
         dispatch(clearAuth());
         navigate("/");
     };

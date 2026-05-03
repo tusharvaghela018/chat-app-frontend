@@ -32,11 +32,11 @@ export async function getLocalPrivateKey(): Promise<string | null> {
 }
 
 /**
- * Removes the private key from local storage (e.g. on logout).
+ * Removes all secrets from local storage (e.g. on logout or PIN reset).
  */
 export async function clearLocalSecrets(): Promise<void> {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).delete(PRIVATE_KEY_ALIAS);
+    tx.objectStore(STORE_NAME).clear();
     return new Promise((res) => (tx.oncomplete = () => res()));
 }

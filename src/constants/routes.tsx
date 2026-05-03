@@ -11,9 +11,10 @@ const GoogleError = lazy(() => import('@/pages/auth/error'))
 const ChatPage = lazy(() => import('@/pages/chat'))
 const JoinGroupPage = lazy(() => import('@/pages/joinGroup'))
 const ResetPassword = lazy(() => import('@/pages/auth/reset-password'))
+const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'))
 
 export type RoutesType = {
-    [key in 'HOME' | "LOGIN" | "REGISTER" | "DASHBOARD" | "DEFAULT" | "GOOGLE_CALLBACK" | 'GOOGLE_ERROR' | 'CHAT' | 'JOIN_GROUP_PAGE' | 'RESET_PASSWORD']: {
+    [key in 'HOME' | "LOGIN" | "REGISTER" | "DASHBOARD" | "DEFAULT" | "GOOGLE_CALLBACK" | 'GOOGLE_ERROR' | 'CHAT' | 'JOIN_GROUP_PAGE' | 'RESET_PASSWORD' | 'PRIVACY_POLICY']: {
         path: string
         routeType: "public" | "authenticated" | "un-authenticated",
         element: RouteObject['element']
@@ -45,6 +46,11 @@ export const ROUTES: RoutesType = {
         path: "/auth/reset-password",
         routeType: "un-authenticated",
         element: <ResetPassword />
+    },
+    PRIVACY_POLICY: {
+        path: "/privacy-policy",
+        routeType: "public",
+        element: <PrivacyPolicy />
     },
     DASHBOARD: {
         path: '/dashboard',

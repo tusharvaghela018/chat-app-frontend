@@ -1,11 +1,12 @@
 import { Suspense } from "react";
-import { createBrowserRouter, RouterProvider, type RouteObject } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, type RouteObject, Outlet } from "react-router-dom";
 import Layout from "@/common/Layout";
 import { ROUTES } from "@/constants/routes";
 import AuthenticateRoute from "@/router/RouteGuard/AuthenticateRoute";
 import UnAuthenticateRoute from "@/router/RouteGuard/UnAuthenticateRoute";
 import RouteError from "@/common/RouteError";
 import PulseLoader from "@/common/Loader/PulseLoader";
+import E2EEInitializer from "@/common/E2EEInitializer";
 
 const applySuspense = (routes: RouteObject[]) => {
     return routes.map(route => {
@@ -44,6 +45,12 @@ export const RoutesArray: RouteObject[] = applySuspense([...Object.keys(ROUTES).
 const allRoutes = createBrowserRouter([
     {
         path: "/",
+        element: (
+            <>
+                <E2EEInitializer />
+                <Outlet />
+            </>
+        ),
         errorElement: <RouteError />,
         children: RoutesArray
     }

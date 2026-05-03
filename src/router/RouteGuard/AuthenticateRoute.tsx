@@ -4,7 +4,7 @@ import { useSelector, useDispatch } from "react-redux"
 
 import PulseLoader from "@/common/Loader/PulseLoader"
 import { ROUTES } from "@/constants/routes"
-import { getToken, setUser } from "@/redux/slices/auth.slice"
+import { getToken, getUser, setUser } from "@/redux/slices/auth.slice"
 import { useGetApi } from "@/hooks/api"
 import type { IUser } from "@/types"
 
@@ -14,6 +14,7 @@ interface MeResponse {
 
 const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
     const token = useSelector(getToken)
+    const user = useSelector(getUser)
     const dispatch = useDispatch()
 
     const { data: meData, isSuccess } = useGetApi<MeResponse>(
@@ -21,8 +22,8 @@ const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
         undefined,
         {
             queryKey: 'get-me',
-            enabled: !!token,
-            staleTime: 5 * 60 * 1000, // 5 minutes
+            enabled: !!token && !user, // Only fetch if we have a token but NO user data in redux
+            staleTime: 0, 
         }
     )
 
