@@ -39,6 +39,7 @@ const setupSchema = yup.object({
         .oneOf([yup.ref("pin")], "PINs do not match"),
     agreed: yup
         .boolean()
+        .required("You must agree to the Privacy Policy")
         .oneOf([true], "You must agree to the Privacy Policy")
 });
 

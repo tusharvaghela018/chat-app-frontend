@@ -1,18 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import { useQueryClient } from "@tanstack/react-query";
 import {
     MessageSquare, LayoutDashboard, LogOut,
     ChevronDown, ShieldCheck, Bell,
-    Home, Camera, Menu, X, User as UserIcon
+    Home, Menu, X, User as UserIcon
 } from "lucide-react";
 import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import ThemeToggle from "@/common/ThemeToggle";
-import { usePatchApi } from "@/hooks/api";
 import { clearLocalSecrets } from "@/utils/indexeddb";
-import type { IUser } from "@/types";
 
 const NAV_LINKS = [
     { to: ROUTES.HOME.path, icon: <Home size={18} />, label: 'Home' },
@@ -25,7 +22,6 @@ export default function Navbar() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const location = useLocation();
-    const queryClient = useQueryClient();
     
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);

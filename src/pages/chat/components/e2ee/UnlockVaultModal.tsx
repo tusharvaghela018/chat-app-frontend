@@ -4,10 +4,9 @@ import Button from "@/common/Button";
 import Input from "@/common/Input";
 import { AlertCircle, Trash2, Info } from "lucide-react";
 import { decryptPrivateKey, type EncryptedVault } from "@/utils/vault";
-import { storeLocalPrivateKey, clearLocalSecrets } from "@/utils/indexeddb";
+import { storeLocalPrivateKey } from "@/utils/indexeddb";
 import { setSessionKeys } from "@/utils/crypto";
 import { BsFillLockFill, BsFillUnlockFill } from "react-icons/bs";
-import axios from "@/api/axios";
 import { Link, useLocation } from "react-router-dom";
 import { ROUTES } from "@/constants/routes";
 
@@ -27,7 +26,7 @@ const UnlockVaultModal = ({ open, vault, salt, publicKey, onComplete, onReset }:
     const [error, setError] = useState("");
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [showResetConfirm, setShowResetConfirm] = useState(false);
-    const [resetLoading, setResetLoading] = useState(false);
+    const [resetLoading] = useState(false);
 
     // Reset state whenever modal opens or location changes (e.g. going back from privacy policy)
     useEffect(() => {
@@ -124,7 +123,7 @@ const UnlockVaultModal = ({ open, vault, salt, publicKey, onComplete, onReset }:
                             Cancel
                         </Button>
                         <Button 
-                            variant="destructive" 
+                            variant="danger" 
                             fullWidth 
                             onClick={handleResetPIN}
                             loading={resetLoading}

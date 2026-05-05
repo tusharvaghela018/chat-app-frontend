@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useSelector, useDispatch } from "react-redux";
+import { useSelector } from "react-redux";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
@@ -8,8 +8,6 @@ import {
     User as UserIcon, 
     AtSign, 
     Camera, 
-    Check, 
-    AlertCircle, 
     ArrowLeft,
     ShieldCheck
 } from "lucide-react";
@@ -20,7 +18,6 @@ import { usePatchApi } from "@/hooks/api";
 import Button from "@/common/Button";
 import Input from "@/common/Input";
 import type { IUser } from "@/types";
-import { ROUTES } from "@/constants/routes";
 
 const profileSchema = yup.object({
     name: yup.string().required("Name is required").min(2, "Name too short"),
@@ -34,7 +31,6 @@ type ProfileForm = yup.InferType<typeof profileSchema>;
 
 const ProfilePage = () => {
     const user = useSelector(getUser);
-    const dispatch = useDispatch();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const fileInputRef = useRef<HTMLInputElement>(null);
