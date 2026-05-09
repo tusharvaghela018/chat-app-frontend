@@ -15,18 +15,19 @@ import { ROUTES } from "@/constants/routes";
 interface RegisterForm {
     name: string;
     email: string;
+    username: string;
     password: string;
     confirmPassword: string;
 }
 
 interface RegisterResponse {
     token: string;
-    user: { 
-        id: number; 
-        name: string; 
+    user: {
+        id: number;
+        name: string;
         username: string;
         email: string;
-        avatar: string; 
+        avatar: string;
         is_online: boolean;
         public_key?: string;
         encrypted_vault?: string;
@@ -43,6 +44,7 @@ const registerSchema = yup.object({
         .string()
         .required("Email is required")
         .email("Enter a valid email"),
+    username: yup.string().required("Username is required"),
     password: yup
         .string()
         .required("Password is required")
@@ -122,8 +124,8 @@ const Register = () => {
 
                     {/* Form */}
                     <form
-                        onSubmit={handleSubmit(({ name, email, password }) =>
-                            signup({ name, email, password })
+                        onSubmit={handleSubmit(({ name, email, username, password }) =>
+                            signup({ name, email, username, password })
                         )}
                         className="flex flex-col gap-4"
                     >
@@ -142,6 +144,15 @@ const Register = () => {
                             leftIcon={<Mail size={16} />}
                             register={register("email")}
                             error={errors.email?.message}
+                        />
+
+                        <Input
+                            label="Username"
+                            type="username"
+                            placeholder="@username123"
+                            leftIcon={<Mail size={16} />}
+                            register={register("username")}
+                            error={errors.username?.message}
                         />
 
                         <Input
