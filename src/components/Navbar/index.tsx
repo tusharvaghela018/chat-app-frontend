@@ -4,7 +4,8 @@ import { useSelector, useDispatch } from "react-redux";
 import {
     MessageSquare, LogOut,
     ChevronDown, ShieldCheck, Bell,
-    Home, Menu, X, User as UserIcon
+    Home, Menu, X, User as UserIcon,
+    Settings as SettingsIcon
 } from "lucide-react";
 import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
@@ -14,6 +15,7 @@ import { clearLocalSecrets } from "@/utils/indexeddb";
 const NAV_LINKS = [
     { to: ROUTES.HOME.path, icon: <Home size={18} />, label: 'Home' },
     { to: ROUTES.CHAT.path, icon: <MessageSquare size={18} />, label: "Messages" },
+    { to: ROUTES.SETTINGS.path, icon: <SettingsIcon size={18} />, label: "Settings" },
 ];
 
 export default function Navbar() {
