@@ -61,7 +61,7 @@ const GoogleCallback = () => {
         }
         dispatch(setUser(userData))
         toast.success("Logged in successfully.")
-        navigate(ROUTES.DASHBOARD.path, { replace: true })
+        navigate(ROUTES.CHAT.path, { replace: true })
     }, [isSuccess, meData])
 
     // ── on error — /me failed, token was bad ──────────────────────────────

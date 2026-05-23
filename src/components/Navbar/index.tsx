@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import {
-    MessageSquare, LayoutDashboard, LogOut,
+    MessageSquare, LogOut,
     ChevronDown, ShieldCheck, Bell,
     Home, Menu, X, User as UserIcon
 } from "lucide-react";
@@ -13,7 +13,6 @@ import { clearLocalSecrets } from "@/utils/indexeddb";
 
 const NAV_LINKS = [
     { to: ROUTES.HOME.path, icon: <Home size={18} />, label: 'Home' },
-    { to: ROUTES.DASHBOARD.path, icon: <LayoutDashboard size={18} />, label: "Dashboard" },
     { to: ROUTES.CHAT.path, icon: <MessageSquare size={18} />, label: "Messages" },
 ];
 

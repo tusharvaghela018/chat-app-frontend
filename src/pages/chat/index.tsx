@@ -15,7 +15,6 @@ const ChatPage = () => {
     const [selectedGroup, setSelectedGroup] = useState<IGroup | null>(null)
     const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false)
     const [activeTab, setActiveTab] = useState<"dm" | "groups" | "all">("dm")
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true)
 
     const location = useLocation()
     const openGroupId = location.state?.openGroupId
@@ -37,7 +36,6 @@ const ChatPage = () => {
             setSelectedGroup(group)
             setSelectedUser(null)
             setActiveTab("groups")
-            setIsSidebarOpen(false) // Close sidebar on mobile when group is selected
         }
     }, [redirectGroupData, openGroupId])
 
@@ -45,42 +43,42 @@ const ChatPage = () => {
         setSelectedUser(user)
         setSelectedGroup(null)
         setActiveTab("dm")
-        setIsSidebarOpen(false) // Close sidebar on mobile
     }
 
     const handleSelectGroup = (group: IGroup) => {
         setSelectedGroup(group)
         setSelectedUser(null)
         setActiveTab("groups")
-        setIsSidebarOpen(false) // Close sidebar on mobile
     }
 
     const handleGroupCreated = (group: IGroup) => {
         setSelectedGroup(group)
         setSelectedUser(null)
         setActiveTab("groups")
-        setIsSidebarOpen(false)
     }
 
     const handleGroupLeft = () => {
         setSelectedGroup(null)
-        setIsSidebarOpen(true)
     }
 
     const handleOpenDM = (user: IUser) => {
         setSelectedUser(user)
         setSelectedGroup(null)
         setActiveTab("dm")
-        setIsSidebarOpen(false)
+    }
+
+    const handleBack = () => {
+        setSelectedUser(null)
+        setSelectedGroup(null)
     }
 
     return (
         <div className="h-[calc(100vh-64px)] flex bg-background overflow-hidden relative">
             
-            {/* Sidebar with responsive classes */}
+            {/* Sidebar Container */}
             <div className={`
-                absolute inset-y-0 left-0 z-30 w-[85%] sm:w-80 md:w-96 lg:w-[400px] transform transition-transform duration-300 ease-in-out bg-card border-r shadow-xl lg:shadow-none
-                ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0 lg:static lg:block"}
+                ${(selectedUser || selectedGroup) ? "hidden lg:block" : "block"}
+                w-full lg:w-80 md:lg:w-96 lg:lg:w-[400px] shrink-0 bg-card border-r h-full
             `}>
                 <Sidebar
                     selectedUserId={selectedUser?.id ?? null}
@@ -94,17 +92,10 @@ const ChatPage = () => {
             </div>
 
             {/* Main Chat Area */}
-            <div className="flex-1 flex flex-col overflow-hidden w-full relative h-full">
-                {/* Mobile Toggle Button (only visible when sidebar is closed on mobile) */}
-                {(!selectedUser && !selectedGroup) && !isSidebarOpen && (
-                    <button 
-                        onClick={() => setIsSidebarOpen(true)}
-                        className="lg:hidden absolute top-4 left-4 z-20 p-2 rounded-lg bg-background border border-border text-foreground shadow-sm"
-                    >
-                        <Menu size={20} />
-                    </button>
-                )}
-
+            <div className={`
+                ${(selectedUser || selectedGroup) ? "block" : "hidden lg:flex"}
+                flex-1 flex flex-col overflow-hidden w-full relative h-full
+            `}>
                 {!selectedUser && !selectedGroup && (
                     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-muted/20">
                         <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-6 text-muted-foreground">
@@ -114,13 +105,6 @@ const ChatPage = () => {
                         <p className="text-muted-foreground max-w-xs">
                             Choose a friend or group from the sidebar to start chatting.
                         </p>
-                        <Button 
-                            variant="primary" 
-                            className="mt-6 lg:hidden"
-                            onClick={() => setIsSidebarOpen(true)}
-                        >
-                            Open Sidebar
-                        </Button>
                     </div>
                 )}
 
@@ -128,7 +112,7 @@ const ChatPage = () => {
                     <div className="flex-1 flex flex-col h-full overflow-hidden">
                         <DirectChat 
                             user={selectedUser} 
-                            onBack={() => setIsSidebarOpen(true)} 
+                            onBack={handleBack} 
                             onClose={() => setSelectedUser(null)}
                         />
                     </div>
@@ -140,7 +124,7 @@ const ChatPage = () => {
                             group={selectedGroup}
                             onGroupLeft={handleGroupLeft}
                             onOpenDM={handleOpenDM}
-                            onBack={() => setIsSidebarOpen(true)}
+                            onBack={handleBack}
                             onClose={() => setSelectedGroup(null)}
                         />
                     </div>
@@ -152,14 +136,6 @@ const ChatPage = () => {
                 onClose={() => setShowCreateGroup(false)}
                 onCreated={handleGroupCreated}
             />
-            
-            {/* Mobile Overlay */}
-            {isSidebarOpen && (
-                <div 
-                    className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-20 lg:hidden"
-                    onClick={() => setIsSidebarOpen(false)}
-                />
-            )}
         </div>
     )
 }

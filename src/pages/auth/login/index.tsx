@@ -79,7 +79,7 @@ const Login = () => {
                     vault_salt
                 }
                 dispatch(setUser(userData))
-                navigate(ROUTES.DASHBOARD.path);
+                navigate(ROUTES.CHAT.path);
             },
             onError: (error) => {
                 const message = axios.isAxiosError(error)

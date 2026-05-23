@@ -5,7 +5,6 @@ import type { RouteObject } from "react-router-dom";
 const Login = lazy(() => import("@/pages/auth/login"))
 const Register = lazy(() => import("@/pages/auth/register"))
 const Home = lazy(() => import("@/pages/home"))
-const Dashboard = lazy(() => import("@/pages/dashboard"))
 const GoogleCallback = lazy(() => import('@/pages/auth/callback'))
 const GoogleError = lazy(() => import('@/pages/auth/error'))
 const ChatPage = lazy(() => import('@/pages/chat'))
@@ -15,7 +14,7 @@ const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'))
 const Profile = lazy(() => import('@/pages/Profile'))
 
 export type RoutesType = {
-    [key in 'HOME' | "LOGIN" | "REGISTER" | "DASHBOARD" | "DEFAULT" | "GOOGLE_CALLBACK" | 'GOOGLE_ERROR' | 'CHAT' | 'JOIN_GROUP_PAGE' | 'RESET_PASSWORD' | 'PRIVACY_POLICY' | 'PROFILE']: {
+    [key in 'HOME' | "LOGIN" | "REGISTER" | "DEFAULT" | "GOOGLE_CALLBACK" | 'GOOGLE_ERROR' | 'CHAT' | 'JOIN_GROUP_PAGE' | 'RESET_PASSWORD' | 'PRIVACY_POLICY' | 'PROFILE']: {
         path: string
         routeType: "public" | "authenticated" | "un-authenticated",
         element: RouteObject['element']
@@ -52,11 +51,6 @@ export const ROUTES: RoutesType = {
         path: "/privacy-policy",
         routeType: "public",
         element: <PrivacyPolicy />
-    },
-    DASHBOARD: {
-        path: '/dashboard',
-        routeType: "authenticated",
-        element: <Dashboard />
     },
     PROFILE: {
         path: '/profile',

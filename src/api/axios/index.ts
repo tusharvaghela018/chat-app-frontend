@@ -3,6 +3,7 @@ import { store } from "@/redux/store";
 import { clearAuth } from "@/redux/slices/auth.slice";
 import { addToast } from "@/redux/slices/toast.slice";
 import { startLoading, stopLoading } from "@/redux/slices/loading.slice";
+import { clearLocalSecrets } from "@/utils/indexeddb";
 
 const axiosInstance = axios.create({
     baseURL: import.meta.env.VITE_API_URL
@@ -46,6 +47,7 @@ axiosInstance.interceptors.response.use(
                 }
                 break;
             case 401:
+                clearLocalSecrets();
                 store.dispatch(clearAuth());
                 if (showToast) {
                     store.dispatch(addToast({ message, type: "error" }));

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
     ShieldCheck, Zap, Lock, MessageSquare, Users,
     CreditCard, Bot, ArrowRight, Sparkles, Globe,
-    Video, LayoutDashboard
+    Video
 } from "lucide-react";
 
 import { getToken } from "@/redux/slices/auth.slice";
@@ -141,9 +141,9 @@ export default function Home() {
 
                     <div className="mt-10 flex flex-wrap justify-center gap-4">
                         {token ? (
-                            <Link to={ROUTES.DASHBOARD.path}>
+                            <Link to={ROUTES.CHAT.path}>
                                 <Button size="lg" className="rounded-xl px-10 shadow-xl shadow-primary/25 font-bold">
-                                    Go to Dashboard <LayoutDashboard size={18} className="ml-2" />
+                                    Go to Messages <MessageSquare size={18} className="ml-2" />
                                 </Button>
                             </Link>
                         ) : (
@@ -266,14 +266,14 @@ export default function Home() {
                     <h2 className="font-display text-3xl font-extrabold sm:text-5xl">Ready to start building?</h2>
                     <p className="mx-auto mt-6 max-w-xl text-lg opacity-90 sm:text-xl">
                         {token
-                            ? "Explore your dashboard and start managing your real-time conversations today."
+                            ? "Start managing your real-time conversations today."
                             : "Sign up in seconds. Join thousands of developers building the future of real-time applications."}
                     </p>
                     <div className="mt-10 flex flex-wrap justify-center gap-4">
                         {token ? (
-                            <Link to={ROUTES.DASHBOARD.path} className="w-full sm:w-auto">
+                            <Link to={ROUTES.CHAT.path} className="w-full sm:w-auto">
                                 <Button size="lg" variant="secondary" className="w-full sm:w-auto rounded-xl px-12 font-bold shadow-lg">
-                                    Go to Dashboard <LayoutDashboard size={18} className="ml-2" />
+                                    Go to Messages <MessageSquare size={18} className="ml-2" />
                                 </Button>
                             </Link>
                         ) : (
