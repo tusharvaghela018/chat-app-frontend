@@ -82,13 +82,16 @@ export const useChat = ({
         }
 
         // ── messages_seen ─────────────────────────────────────────────────
-        const onMessagesSeen = ({ conversationId }: { conversationId: number }) => {
+        const onMessagesSeen = ({ conversationId, messageIds }: { conversationId: number; messageIds?: number[] }) => {
             setMessages((prev) =>
-                prev.map((m) =>
-                    m.conversation_id === conversationId
-                        ? { ...m, is_seen: true }
-                        : m
-                )
+                prev.map((m) => {
+                    if (m.conversation_id !== conversationId) return m;
+
+                    // If server provided specific IDs, only update those
+                    if (messageIds && !messageIds.includes(m.id)) return m;
+
+                    return { ...m, is_seen: true };
+                })
             )
         }
 

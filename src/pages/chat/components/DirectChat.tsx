@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react"
 import { useSelector } from "react-redux"
-import { User, Send, ChevronLeft, MessageSquare, X, Lock } from "lucide-react"
-import { useGetApi } from "@/hooks/api"
+import { User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert, Ban, Check, UserMinus } from "lucide-react"
+import { useGetApi, usePatchApi } from "@/hooks/api"
 import { useSocket } from "@/hooks/socket"
 import { useChat } from "@/pages/chat/hooks"
 import { getUser } from "@/redux/slices/auth.slice"
-import type { IUser } from "@/types"
+import type { IUser, IConversation } from "@/types"
 import Button from "@/common/Button"
+import { useQueryClient } from "@tanstack/react-query"
 import { 
     encryptDirectMessage, 
     decryptDirectMessage, 
@@ -36,10 +37,55 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const authUser = useSelector(getUser)
     const socket = useSocket()
     const myKeys = getSessionKeys()
+    const queryClient = useQueryClient()
 
     const [input, setInput] = useState("")
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
+
+    // ── fetch conversation ────────────────────────────────────────────────
+    const { data: convData } = useGetApi<IConversation>(
+        `/conversations/user/${user.id}`,
+        undefined,
+        {
+            queryKey: `conversation-${user.id}`,
+            enabled: !!user.id,
+        }
+    )
+
+    const conversation = convData?.data as IConversation
+    const isPending = conversation?.status === 'pending'
+    const isRejected = conversation?.status === 'rejected'
+    const isAccepted = conversation?.status === 'accepted'
+    
+    const isIRequester = conversation?.sender_id === authUser?.id
+    const isIRecipient = conversation?.receiver_id === authUser?.id
+    
+    const iBlocked = isIRequester ? conversation?.blocked_by_sender : conversation?.blocked_by_receiver
+
+    // If I am the requester and status is rejected, it means THEY rejected ME
+    const iAmRejected = isIRequester && isRejected
+
+    const { mutate: updateStatus } = usePatchApi(`/conversations/${conversation?.id}/status`)
+    const { mutate: updateBlock } = usePatchApi(`/conversations/${conversation?.id}/block`)
+
+    const handleUpdateStatus = (status: 'accepted' | 'rejected') => {
+        updateStatus({ body: { status } }, {
+            onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: [`conversation-${user.id}`] })
+                queryClient.invalidateQueries({ queryKey: ['conversations'] })
+            }
+        })
+    }
+
+    const handleToggleBlock = (block: boolean) => {
+        updateBlock({ body: { block } }, {
+            onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: [`conversation-${user.id}`] })
+                queryClient.invalidateQueries({ queryKey: ['conversations'] })
+            }
+        })
+    }
 
     const {
         messages,
@@ -101,11 +147,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             const conversationId = msgs[0]?.conversation_id ?? null
             activeConvRef.current = conversationId
 
-            if (conversationId && socket) {
+            if (conversationId && socket && !iBlocked && isAccepted) {
                 emitMarkSeen(conversationId, user.id)
             }
         }
-    }, [user.id, messageData, socket])
+    }, [user.id, messageData, socket, iBlocked, isAccepted])
 
     // ── auto scroll ───────────────────────────────────────────────────────
     useEffect(() => {
@@ -115,6 +161,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     // ── typing ────────────────────────────────────────────────────────────
     const handleTyping = (val: string) => {
         setInput(val)
+        if (iBlocked || isPending || isRejected) return
+        
         emitTypingStart(user.id)
 
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
@@ -125,7 +173,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
 
     // ── send ──────────────────────────────────────────────────────────────
     const handleSend = () => {
-        if (!input.trim()) return
+        if (!input.trim() || iBlocked || iAmRejected) return
 
         let finalContent = input
         if (user.public_key && myKeys) {
@@ -187,6 +235,15 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                 </div>
 
                 <div className="flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleToggleBlock(!iBlocked)}
+                        className={`transition-colors rounded-full ${iBlocked ? "text-red-500 bg-red-50" : "text-muted-foreground"}`}
+                        title={iBlocked ? "Unblock user" : "Block user"}
+                    >
+                        <Ban size={20} />
+                    </Button>
                     {onClose && (
                         <div className="border-l ml-1 pl-1">
                             <Button
@@ -215,9 +272,15 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                 ) : (isSuccess && messages.length === 0) ? (
                     <div className="flex h-full flex-col items-center justify-center space-y-4 animate-in fade-in duration-500">
                         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                            <MessageSquare size={32} />
+                            {isPending && isIRecipient ? <ShieldAlert size={32} /> : <MessageSquare size={32} />}
                         </div>
-                        <p className="text-sm font-medium text-muted-foreground">No messages yet — say hello 👋</p>
+                        <p className="text-sm font-medium text-muted-foreground text-center px-6">
+                            {isPending && isIRecipient 
+                                ? "Accept this request to see messages and start chatting." 
+                                : iAmRejected 
+                                ? "Your message request was not accepted."
+                                : "No messages yet — say hello 👋"}
+                        </p>
                     </div>
                 ) : (
                     <>
@@ -261,25 +324,119 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                 <div ref={bottomRef} />
             </div>
 
-            {/* input */}
+            {/* footer / input area */}
             <div className="border-t bg-card p-4 pb-safe sm:px-6">
-                <div className="flex items-center gap-2 max-w-4xl mx-auto">
-                    <Input
-                        value={input}
-                        onChange={(e) => handleTyping(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                        placeholder={`Message ${user.name}...`}
-                        containerClassName="flex-1"
-                        inputClassName="rounded-2xl h-11"
-                    />
-                    <Button
-                        onClick={handleSend}
-                        disabled={!input.trim()}
-                        className="h-11 w-11 shrink-0 rounded-2xl shadow-lg shadow-primary/20"
-                    >
-                        <Send size={18} />
-                    </Button>
-                </div>
+                {iBlocked ? (
+                    <div className="flex flex-col items-center justify-center py-4 space-y-3 bg-red-50/50 rounded-2xl border border-red-100">
+                        <div className="flex items-center gap-2 text-red-600 font-bold text-sm">
+                            <Ban size={18} />
+                            You have blocked this user
+                        </div>
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleToggleBlock(false)}
+                            className="rounded-xl border-red-200 text-red-600 hover:bg-red-50"
+                        >
+                            Unblock {user.name}
+                        </Button>
+                    </div>
+                ) : iAmRejected ? (
+                    <div className="flex flex-col items-center justify-center py-4 space-y-1 bg-muted/50 rounded-2xl border border-border">
+                        <div className="flex items-center gap-2 text-muted-foreground font-bold text-sm">
+                            <X size={18} />
+                            Message request rejected
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">You cannot send messages to this user.</p>
+                    </div>
+                ) : isPending && isIRecipient ? (
+                    <div className="flex flex-col items-center justify-center py-6 space-y-4 bg-primary/5 rounded-2xl border border-primary/10">
+                        <div className="text-center space-y-1">
+                            <h3 className="font-bold text-sm">Message Request</h3>
+                            <p className="text-xs text-muted-foreground">Accept to start chatting with {user.name}</p>
+                        </div>
+                        <div className="flex items-center gap-2 w-full max-w-xs">
+                            <Button 
+                                fullWidth 
+                                onClick={() => handleUpdateStatus('accepted')}
+                                className="rounded-xl h-10 text-xs font-bold"
+                            >
+                                <Check size={16} className="mr-2" /> Accept
+                            </Button>
+                            <Button 
+                                variant="outline" 
+                                fullWidth 
+                                onClick={() => handleUpdateStatus('rejected')}
+                                className="rounded-xl h-10 text-xs font-bold"
+                            >
+                                <UserMinus size={16} className="mr-2" /> Reject
+                            </Button>
+                            <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleToggleBlock(true)}
+                                className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-red-500"
+                                title="Block"
+                            >
+                                <Ban size={18} />
+                            </Button>
+                        </div>
+                    </div>
+                ) : isPending && isIRequester ? (
+                    <div className="py-4 text-center">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
+                            <ShieldAlert size={14} />
+                            Waiting for acceptance
+                        </div>
+                        <div className="mt-4 flex items-center gap-2 max-w-4xl mx-auto">
+                            <Input
+                                value={input}
+                                onChange={(e) => handleTyping(e.target.value)}
+                                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                                placeholder={`Message ${user.name}...`}
+                                containerClassName="flex-1"
+                                inputClassName="rounded-2xl h-11"
+                            />
+                            <Button
+                                onClick={handleSend}
+                                disabled={!input.trim()}
+                                className="h-11 w-11 shrink-0 rounded-2xl shadow-lg shadow-primary/20"
+                            >
+                                <Send size={18} />
+                            </Button>
+                        </div>
+                    </div>
+                ) : isRejected && isIRecipient ? (
+                    <div className="flex flex-col items-center justify-center py-4 space-y-3 bg-muted/50 rounded-2xl border border-border">
+                        <p className="text-xs text-muted-foreground font-medium">You rejected this request</p>
+                        <Button 
+                            variant="primary" 
+                            size="sm" 
+                            onClick={() => handleUpdateStatus('accepted')}
+                            className="rounded-xl px-6 h-9 text-xs font-bold"
+                        >
+                            Accept Now
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2 max-w-4xl mx-auto">
+                        <Input
+                            value={input}
+                            onChange={(e) => handleTyping(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                            placeholder={`Message ${user.name}...`}
+                            containerClassName="flex-1"
+                            inputClassName="rounded-2xl h-11"
+                        />
+                        <Button
+                            onClick={handleSend}
+                            disabled={!input.trim()}
+                            className="h-11 w-11 shrink-0 rounded-2xl shadow-lg shadow-primary/20"
+                        >
+                            <Send size={18} />
+                        </Button>
+                    </div>
+                )}
             </div>
         </div>
     )
