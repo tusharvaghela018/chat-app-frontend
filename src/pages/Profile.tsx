@@ -98,7 +98,7 @@ const ProfilePage = () => {
         : "U";
 
     return (
-        <div className="min-h-[calc(100-64px)] bg-background text-foreground pb-20 pt-10">
+        <div className="min-h-full bg-background text-foreground pb-20 pt-6">
             <main className="mx-auto max-w-2xl px-4">
                 <div className="flex flex-col gap-6 mb-8">
                     <button 

@@ -8,7 +8,6 @@ import type { IUser } from "@/types"
 import type { IGroup } from "@/types"
 import { useGetApi } from "@/hooks/api"
 import { Menu } from "lucide-react"
-import Button from "@/common/Button"
 
 const ChatPage = () => {
     const [selectedUser, setSelectedUser] = useState<IUser | null>(null)
@@ -73,8 +72,8 @@ const ChatPage = () => {
     }
 
     return (
-        <div className="h-[calc(100vh-64px)] flex bg-background overflow-hidden relative">
-            
+        <div className="h-full flex bg-background overflow-hidden relative">
+
             {/* Sidebar Container */}
             <div className={`
                 ${(selectedUser || selectedGroup) ? "hidden lg:block" : "block"}
@@ -110,9 +109,9 @@ const ChatPage = () => {
 
                 {selectedUser && (
                     <div className="flex-1 flex flex-col h-full overflow-hidden">
-                        <DirectChat 
-                            user={selectedUser} 
-                            onBack={handleBack} 
+                        <DirectChat
+                            user={selectedUser}
+                            onBack={handleBack}
                             onClose={() => setSelectedUser(null)}
                         />
                     </div>
