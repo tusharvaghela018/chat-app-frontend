@@ -73,7 +73,7 @@ const Button: React.FC<ButtonProps> = ({
             `}
             {...props}
         >
-            {localLoading && (
+            {localLoading || isGlobalLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-inherit rounded-lg">
                     <Loader size="sm" />
                 </div>
