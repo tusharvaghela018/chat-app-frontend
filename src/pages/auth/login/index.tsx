@@ -21,6 +21,7 @@ interface LoginForm {
 
 interface LoginResponse {
     token: string;
+    requires_2fa?: boolean;
     user: { 
         id: number; 
         name: string; 
@@ -65,6 +66,10 @@ const Login = () => {
         "/auth/login",
         {
             onSuccess: (response) => {
+                if (response.data?.requires_2fa) {
+                    navigate(`${ROUTES.VERIFY_2FA.path}?token=${response.data.token}`);
+                    return;
+                }
                 dispatch(setToken(response.data?.token || ""));
                 const { id, name, username, email, avatar, is_online, public_key, encrypted_vault, vault_salt } = { ...response.data?.user }
                 const userData = {

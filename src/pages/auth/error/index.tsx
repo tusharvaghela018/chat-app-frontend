@@ -12,6 +12,7 @@ const GoogleError = () => {
 
     useEffect(() => {
         const errorCode = searchParams.get("message");
+        console.log("error code is here", errorCode)
 
         // Map backend error codes → user-friendly messages
         const errorMap: Record<string, string> = {

@@ -2,7 +2,6 @@ import axios from "axios";
 import { store } from "@/redux/store";
 import { clearAuth } from "@/redux/slices/auth.slice";
 import { addToast } from "@/redux/slices/toast.slice";
-import { startLoading, stopLoading } from "@/redux/slices/loading.slice";
 import { clearLocalSecrets } from "@/utils/indexeddb";
 
 const axiosInstance = axios.create({
@@ -10,7 +9,6 @@ const axiosInstance = axios.create({
 });
 
 axiosInstance.interceptors.request.use((config) => {
-    store.dispatch(startLoading());
     const token = store.getState().auth.token;
 
     if (token) {
@@ -22,7 +20,6 @@ axiosInstance.interceptors.request.use((config) => {
 
 axiosInstance.interceptors.response.use(
     (response) => {
-        store.dispatch(stopLoading());
         const showToast = response?.data?.show_toast;
         const message = response?.data?.message;
 
@@ -33,8 +30,6 @@ axiosInstance.interceptors.response.use(
         return response;
     },
     (error) => {
-        store.dispatch(stopLoading());
-
         const status = error.response?.status;
         const showToast = error?.response?.data?.show_toast
         const message =

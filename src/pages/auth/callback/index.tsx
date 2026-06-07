@@ -20,9 +20,17 @@ const GoogleCallback = () => {
     const toast = useToast();
 
     const token = searchParams.get("token");
+    const requires2FA = searchParams.get("requires_2fa") === "true";
+
+    // ── if 2FA is required, redirect to verify page immediately ──────────
+    useEffect(() => {
+        if (token && requires2FA) {
+            navigate(`${ROUTES.VERIFY_2FA.path}?token=${token}`, { replace: true });
+        }
+    }, [token, requires2FA]);
 
     // ── set token immediately so axiosInstance sends it in headers ────────
-    if (token) {
+    if (token && !requires2FA) {
         dispatch(setToken(token));
     }
 
@@ -32,7 +40,7 @@ const GoogleCallback = () => {
         undefined,
         {
             queryKey: 'get-me',
-            enabled: !!token,   // only fires when token is present
+            enabled: !!token && !requires2FA,   // only fires when token is present and 2FA is not required
             retry: false,       // don't retry on failure — just redirect to login
         }
     )

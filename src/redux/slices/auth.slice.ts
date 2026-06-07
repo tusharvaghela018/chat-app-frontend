@@ -11,6 +11,7 @@ interface User {
     public_key?: string
     encrypted_vault?: string
     vault_salt?: string
+    two_factor_enabled?: boolean
 }
 
 interface AuthSlice {
