@@ -23,6 +23,7 @@ const Verify2FA = () => {
 
     const preAuthToken = searchParams.get("token");
     const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+    const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
     const schema = yup.object({
         code: yup
@@ -51,8 +52,37 @@ const Verify2FA = () => {
     useEffect(() => {
         if (!preAuthToken) {
             navigate(ROUTES.LOGIN.path);
+            return;
+        }
+
+        try {
+            // Decode JWT to get expiration time
+            const payload = JSON.parse(atob(preAuthToken.split('.')[1]));
+            const expiry = payload.exp * 1000;
+
+            const updateTimer = () => {
+                const now = Date.now();
+                const diff = Math.max(0, Math.floor((expiry - now) / 1000));
+                setTimeLeft(diff);
+
+                if (diff <= 0) {
+                    navigate(ROUTES.LOGIN.path);
+                }
+            };
+
+            updateTimer();
+            const interval = setInterval(updateTimer, 1000);
+            return () => clearInterval(interval);
+        } catch (error) {
+            navigate(ROUTES.LOGIN.path);
         }
     }, [preAuthToken, navigate]);
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+    };
 
     const { mutate: verify2FA, isPending } = usePostApi<any, { token: string; code?: string; recovery_code?: string }>(
         "/auth/2fa/login",
@@ -101,6 +131,13 @@ const Verify2FA = () => {
                                 : "Enter the 6-digit code from your authenticator app to continue."
                             }
                         </p>
+
+                        {timeLeft !== null && (
+                            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-xs font-medium">
+                                <span className={`w-2 h-2 rounded-full animate-pulse ${timeLeft < 60 ? "bg-destructive" : "bg-primary"}`} />
+                                Session expires in: <span className={`font-bold ${timeLeft < 60 ? "text-destructive" : "text-foreground"}`}>{formatTime(timeLeft)}</span>
+                            </div>
+                        )}
                     </div>
 
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
