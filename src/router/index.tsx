@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { createBrowserRouter, RouterProvider, type RouteObject, Outlet } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, Outlet } from "react-router-dom";
 import Layout from "@/common/Layout";
 import { ROUTES } from "@/constants/routes";
 import AuthenticateRoute from "@/router/RouteGuard/AuthenticateRoute";
@@ -7,40 +7,6 @@ import UnAuthenticateRoute from "@/router/RouteGuard/UnAuthenticateRoute";
 import RouteError from "@/common/RouteError";
 import PulseLoader from "@/common/Loader/PulseLoader";
 import E2EEInitializer from "@/common/E2EEInitializer";
-
-const applySuspense = (routes: RouteObject[]) => {
-    return routes.map(route => {
-        return {
-            ...route,
-            element: <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{route.element}</Suspense>
-        }
-    })
-}
-
-export const RoutesArray: RouteObject[] = applySuspense([...Object.keys(ROUTES).map((key) => {
-    const route = ROUTES[key as keyof typeof ROUTES];
-    const routeObj: RouteObject = {
-        path: route.path,
-        element: route.element
-    }
-
-    if (route.routeType === "authenticated") {
-        routeObj['element'] = (
-            <AuthenticateRoute>
-                <Layout>
-                    {route.element}
-                </Layout>
-            </AuthenticateRoute>)
-    } else if (route.routeType === "un-authenticated") {
-        routeObj['element'] = (
-            <UnAuthenticateRoute>
-                {route.element}
-            </UnAuthenticateRoute>)
-    }
-
-    return routeObj
-})])
-
 
 const allRoutes = createBrowserRouter([
     {
@@ -52,7 +18,75 @@ const allRoutes = createBrowserRouter([
             </>
         ),
         errorElement: <RouteError />,
-        children: RoutesArray
+        children: [
+            // Public Routes (No Layout)
+            {
+                path: ROUTES.HOME.path,
+                element: <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{ROUTES.HOME.element}</Suspense>
+            },
+            {
+                path: ROUTES.PRIVACY_POLICY.path,
+                element: <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{ROUTES.PRIVACY_POLICY.element}</Suspense>
+            },
+            {
+                path: ROUTES.VERIFY_2FA.path,
+                element: <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{ROUTES.VERIFY_2FA.element}</Suspense>
+            },
+            {
+                path: ROUTES.GOOGLE_CALLBACK.path,
+                element: <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{ROUTES.GOOGLE_CALLBACK.element}</Suspense>
+            },
+            {
+                path: ROUTES.GOOGLE_ERROR.path,
+                element: <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{ROUTES.GOOGLE_ERROR.element}</Suspense>
+            },
+            {
+                path: ROUTES.RESET_PASSWORD.path,
+                element: <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{ROUTES.RESET_PASSWORD.element}</Suspense>
+            },
+
+            // Un-Authenticated Routes (Login/Register)
+            {
+                element: <UnAuthenticateRoute><Outlet /></UnAuthenticateRoute>,
+                children: [
+                    {
+                        path: ROUTES.LOGIN.path,
+                        element: <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{ROUTES.LOGIN.element}</Suspense>
+                    },
+                    {
+                        path: ROUTES.REGISTER.path,
+                        element: <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{ROUTES.REGISTER.element}</Suspense>
+                    }
+                ]
+            },
+
+            // Authenticated Routes (With Persistent Layout)
+            {
+                element: (
+                    <AuthenticateRoute>
+                        <Layout />
+                    </AuthenticateRoute>
+                ),
+                children: [
+                    {
+                        path: ROUTES.CHAT.path,
+                        element: <Suspense fallback={<PulseLoader size="md" fullScreen={false} />}>{ROUTES.CHAT.element}</Suspense>
+                    },
+                    {
+                        path: ROUTES.SETTINGS.path,
+                        element: <Suspense fallback={<PulseLoader size="md" fullScreen={false} />}>{ROUTES.SETTINGS.element}</Suspense>
+                    },
+                    {
+                        path: ROUTES.PROFILE.path,
+                        element: <Suspense fallback={<PulseLoader size="md" fullScreen={false} />}>{ROUTES.PROFILE.element}</Suspense>
+                    },
+                    {
+                        path: ROUTES.JOIN_GROUP_PAGE.path,
+                        element: <Suspense fallback={<PulseLoader size="md" fullScreen={false} />}>{ROUTES.JOIN_GROUP_PAGE.element}</Suspense>
+                    }
+                ]
+            }
+        ]
     }
 ])
 

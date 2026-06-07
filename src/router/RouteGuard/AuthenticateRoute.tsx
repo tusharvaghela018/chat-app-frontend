@@ -1,8 +1,7 @@
-import { Suspense, type PropsWithChildren, useEffect } from "react"
+import { type PropsWithChildren, useEffect } from "react"
 import { Navigate } from "react-router-dom"
 import { useSelector, useDispatch } from "react-redux"
 
-import PulseLoader from "@/common/Loader/PulseLoader"
 import { ROUTES } from "@/constants/routes"
 import { getToken, getUser, setUser } from "@/redux/slices/auth.slice"
 import { useGetApi } from "@/hooks/api"
@@ -49,7 +48,7 @@ const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
     }
 
     return (
-        <Suspense fallback={<PulseLoader fullScreen size="lg" />}>{children}</Suspense>
+        <>{children}</>
     )
 }
 

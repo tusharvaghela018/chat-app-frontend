@@ -1,7 +1,5 @@
 import Button from "@/common/Button";
 import React, { useRef } from "react";
-import { useSelector } from "react-redux";
-import type { RootState } from "@/redux/store";
 
 interface ModalProps {
     open: boolean;
@@ -18,8 +16,7 @@ const Modal: React.FC<ModalProps> = ({
     children,
     loading: localLoading = false
 }) => {
-    const isGlobalLoading = useSelector((state: RootState) => state.loading.isLoading);
-    const isBusy = localLoading || isGlobalLoading;
+    const isBusy = localLoading;
     const modalRef = useRef<HTMLDivElement>(null);
 
     if (!open) return null;

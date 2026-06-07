@@ -1,7 +1,5 @@
 import React from "react"
 import Loader from "@/common/Loader"
-import { useSelector } from "react-redux"
-import type { RootState } from "@/redux/store"
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     loading?: boolean
@@ -26,8 +24,7 @@ const Button: React.FC<ButtonProps> = ({
     className = "",
     ...props
 }) => {
-    const isGlobalLoading = useSelector((state: RootState) => state.loading.isLoading)
-    const isDisabled = disabled || localLoading || isGlobalLoading
+    const isDisabled = disabled || localLoading
 
     const variants = {
         primary: "bg-primary text-primary-foreground hover:opacity-90",
@@ -73,7 +70,7 @@ const Button: React.FC<ButtonProps> = ({
             `}
             {...props}
         >
-            {localLoading || isGlobalLoading && (
+            {localLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-inherit rounded-lg">
                     <Loader size="sm" />
                 </div>

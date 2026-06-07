@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import type { UseFormRegisterReturn } from "react-hook-form";
-import { useSelector } from "react-redux";
-import type { RootState } from "@/redux/store";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string;
@@ -30,12 +28,11 @@ const Input: React.FC<InputProps> = ({
     type = "text",
     ...props
 }) => {
-    const isGlobalLoading = useSelector((state: RootState) => state.loading.isLoading);
     const [showPassword, setShowPassword] = useState(false);
 
     const inputType = isPassword ? (showPassword ? "text" : "password") : type;
 
-    const isDisabled = disabled || localLoading || isGlobalLoading;
+    const isDisabled = disabled || localLoading;
 
     return (
         <div className={`flex flex-col gap-1.5 ${containerClassName}`}>
