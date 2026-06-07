@@ -31,6 +31,7 @@ const SecuritySettings = () => {
     const [isOpen, setIsOpen] = useState(true)
     const [isSettingUp2FA, setIsSettingUp2FA] = useState(false)
     const [qrCode, setQrCode] = useState<string | null>(null)
+    const [otpUri, setOtpUri] = useState<string | null>(null)
     const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null)
     const [copied, setCopied] = useState(false)
     const [isDisabling, setIsDisabling] = useState(false)
@@ -66,11 +67,12 @@ const SecuritySettings = () => {
     const disableCodeValue = watchDisable("code");
 
     // ── Setup 2FA ────────────────────────────────────────────────────────
-    const { mutate: setup2FA, isPending: isSettingUp } = usePostApi<{ qrcode: string }, any>(
+    const { mutate: setup2FA, isPending: isSettingUp } = usePostApi<{ qrcode: string; uri: string }, any>(
         "/auth/2fa/setup",
         {
             onSuccess: (response) => {
                 setQrCode(response.data?.qrcode || null)
+                setOtpUri(response.data?.uri || null)
                 setIsSettingUp2FA(true)
                 setIsCodesHidden(false)
             },
@@ -203,8 +205,22 @@ const SecuritySettings = () => {
                                     </div>
                                     <div className="rounded-xl bg-background p-4 border flex flex-col items-center gap-4">
                                         {qrCode ? (
-                                            <div className="bg-white p-2 rounded-lg border-2 border-primary/20">
-                                                <img src={qrCode} alt="2FA QR Code" className="w-40 h-40" />
+                                            <div className="flex flex-col items-center gap-4 w-full">
+                                                <div className="bg-white p-2 rounded-lg border-2 border-primary/20">
+                                                    <img src={qrCode} alt="2FA QR Code" className="w-40 h-40" />
+                                                </div>
+                                                
+                                                {/* Mobile Deep Link Button */}
+                                                {otpUri && (
+                                                    <Button 
+                                                        variant="outline" 
+                                                        className="w-full text-xs gap-2 rounded-xl h-9 border-primary/30 text-primary hover:bg-primary/5"
+                                                        onClick={() => window.open(otpUri)}
+                                                    >
+                                                        <Fingerprint size={14} />
+                                                        Open in Authenticator App
+                                                    </Button>
+                                                )}
                                             </div>
                                         ) : (
                                             <div className="aspect-square w-40 bg-muted rounded-lg flex items-center justify-center animate-pulse">
