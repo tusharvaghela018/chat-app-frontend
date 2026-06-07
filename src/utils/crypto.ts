@@ -25,6 +25,10 @@ export const getSessionKeys = (): KeyPair | null => {
     return sessionKeys;
 };
 
+export const clearSessionKeys = () => {
+    sessionKeys = null;
+};
+
 /**
  * Encrypts a message for a specific recipient.
  */

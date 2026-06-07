@@ -20,6 +20,14 @@ const E2EEInitializer = () => {
 
     const { mutate: updateSecurityData } = usePatchApi('/users/public-key');
 
+    // Reset initialization state when the user changes (e.g. login/logout)
+    useEffect(() => {
+        setInitialized(false);
+        setShowSetup(false);
+        setShowUnlock(false);
+        setIsResetting(false);
+    }, [user?.id]);
+
     useEffect(() => {
         const initializeKeys = async () => {
             if (!user || initialized) return;

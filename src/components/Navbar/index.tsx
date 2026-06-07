@@ -11,6 +11,7 @@ import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import ThemeToggle from "@/common/ThemeToggle";
 import { clearLocalSecrets } from "@/utils/indexeddb";
+import { clearSessionKeys } from "@/utils/crypto";
 
 const NAV_LINKS = [
     { to: ROUTES.HOME.path, icon: <Home size={18} />, label: 'Home' },
@@ -45,6 +46,7 @@ export default function Navbar() {
 
     const logout = async () => {
         await clearLocalSecrets();
+        clearSessionKeys();
         dispatch(clearAuth());
         navigate("/");
     };
