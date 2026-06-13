@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react"
 import { useSelector } from "react-redux"
-import { User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert, Ban, Check, UserMinus } from "lucide-react"
+import { User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert, Ban, Check, UserMinus, Loader2 } from "lucide-react"
 import { useGetApi, usePatchApi } from "@/hooks/api"
+import axiosInstance from "@/api/axios"
 import { useSocket } from "@/hooks/socket"
 import { useChat } from "@/pages/chat/hooks"
 import { getUser } from "@/redux/slices/auth.slice"
@@ -41,6 +42,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
 
     const [input, setInput] = useState("")
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [hasMore, setHasMore] = useState(true)
+    const [isLoadingMore, setIsLoadingMore] = useState(false)
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
+    const topRef = useRef<HTMLDivElement>(null)
+    const firstMessageIdRef = useRef<number | null>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
 
     // ── fetch conversation ────────────────────────────────────────────────
@@ -87,32 +93,6 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         })
     }
 
-    const {
-        messages,
-        setMessages,
-        isTyping,
-        activeConvRef,
-        sendMessage,
-        emitMarkSeen,
-        emitTypingStart,
-        emitTypingStop,
-    } = useChat({
-        socket,
-        selectedUserId: user.id,
-        currentUserId: authUser?.id ?? null,
-    })
-
-    // ── load messages ─────────────────────────────────────────────────────
-    const { data: messageData, isFetching, isSuccess } = useGetApi<IMessage[]>(
-        `/message/${user.id}`,
-        undefined,
-        {
-            queryKey: `messages-${user.id}`,
-            enabled: !!user.id,
-            staleTime: 0,
-        }
-    )
-
     // Helper to decrypt messages
     const decryptMessage = (msg: IMessage) => {
         try {
@@ -130,9 +110,37 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         }
     }
 
+    const {
+        messages,
+        setMessages,
+        isTyping,
+        activeConvRef,
+        sendMessage,
+        emitMarkSeen,
+        emitTypingStart,
+        emitTypingStop,
+    } = useChat({
+        socket,
+        selectedUserId: user.id,
+        currentUserId: authUser?.id ?? null,
+    })
+
+    // ── initial load ─────────────────────────────────────────────────────
+    const { data: messageData, isFetching, isSuccess } = useGetApi<{ messages: IMessage[], hasMore: boolean }>(
+        `/message/${user.id}`,
+        { limit: 30 },
+        {
+            queryKey: `messages-${user.id}`,
+            enabled: !!user.id,
+            staleTime: 0,
+        }
+    )
+
     // ── sync state ────────────────────────────────────────
     useEffect(() => {
         setMessages([])
+        setHasMore(true)
+        setIsLoadingMore(false)
         setInput("")
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
         emitTypingStop(user.id)
@@ -141,8 +149,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             const msgs = Array.isArray(messageData.data)
                 ? messageData.data
                 : (messageData.data as any)?.messages ?? []
+            
+            const more = (messageData.data as any)?.hasMore ?? false
 
             setMessages(msgs)
+            setHasMore(more)
 
             const conversationId = msgs[0]?.conversation_id ?? null
             activeConvRef.current = conversationId
@@ -150,12 +161,85 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             if (conversationId && socket && !iBlocked && isAccepted) {
                 emitMarkSeen(conversationId, user.id)
             }
+
+            // Scroll to bottom on initial load
+            setTimeout(() => {
+                bottomRef.current?.scrollIntoView()
+            }, 100)
         }
     }, [user.id, messageData, socket, iBlocked, isAccepted])
 
-    // ── auto scroll ───────────────────────────────────────────────────────
+    // ── fetch more ────────────────────────────────────────────────────────
+    const fetchMoreMessages = async () => {
+        if (!hasMore || isLoadingMore || messages.length === 0) return
+
+        setIsLoadingMore(true)
+        const before = messages[0].id
+        
+        try {
+            const { data: axiosData } = await axiosInstance.get(`/message/${user.id}`, {
+                params: { before, limit: 30 }
+            })
+            
+            const newMessages = axiosData?.data?.messages ?? []
+            const more = axiosData?.data?.hasMore ?? false
+
+            if (newMessages.length > 0) {
+                // Store current scroll height to maintain position
+                const container = scrollContainerRef.current
+                const previousHeight = container?.scrollHeight ?? 0
+
+                setMessages(prev => [...newMessages, ...prev])
+                setHasMore(more)
+
+                // Adjust scroll after DOM update
+                requestAnimationFrame(() => {
+                    if (container) {
+                        const newHeight = container.scrollHeight
+                        container.scrollTop = newHeight - previousHeight
+                    }
+                })
+            } else {
+                setHasMore(false)
+            }
+        } catch (error) {
+            console.error("Failed to load more messages", error)
+        } finally {
+            setIsLoadingMore(false)
+        }
+    }
+
+    // ── intersection observer ─────────────────────────────────────────────
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+                    fetchMoreMessages()
+                }
+            },
+            { threshold: 0.5 }
+        )
+
+        if (topRef.current) {
+            observer.observe(topRef.current)
+        }
+
+        return () => observer.disconnect()
+    }, [hasMore, isLoadingMore, messages])
+
+    // ── auto scroll on new message ────────────────────────────────────────
+    useEffect(() => {
+        // Only auto-scroll to bottom if we're near the bottom or it's a new message from US
+        const container = scrollContainerRef.current
+        if (!container) return
+
+        const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100
+        const lastMessage = messages[messages.length - 1]
+        const isMine = lastMessage?.sender_id === authUser?.id
+
+        if (isAtBottom || isMine) {
+            bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+        }
     }, [messages])
 
     // ── typing ────────────────────────────────────────────────────────────
@@ -260,7 +344,16 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             </div>
 
             {/* messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50 transition-all duration-300">
+            <div 
+                ref={scrollContainerRef}
+                className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50 transition-all duration-300"
+            >
+                <div ref={topRef} className="h-1" />
+                {isLoadingMore && (
+                    <div className="flex justify-center py-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    </div>
+                )}
                 {(isFetching && messages.length === 0) ? (
                     <div className="flex-1 space-y-4 animate-in fade-in duration-500">
                         {[1, 2, 3, 4, 5].map((i) => (

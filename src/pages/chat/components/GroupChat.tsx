@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react"
-import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy, Send, ChevronLeft, X, Lock } from "lucide-react"
+import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy, Send, ChevronLeft, X, Lock, Loader2 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
 import { useGetApi, useDeleteApi, usePatchApi, usePostApi } from "@/hooks/api"
+import axiosInstance from "@/api/axios"
 import { getUser } from "@/redux/slices/auth.slice"
 import type { IGroup, IGroupMember, IUser } from "@/types"
 import Button from "@/common/Button"
@@ -132,6 +133,10 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const [input, setInput] = useState<string>("");
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
+    const [hasMore, setHasMore] = useState(true)
+    const [isLoadingMore, setIsLoadingMore] = useState(false)
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
+    const topRef = useRef<HTMLDivElement>(null)
 
     const queryClient = useQueryClient()
 
@@ -208,28 +213,106 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         }
     }
 
-    // ── load messages ────────────────────────────────────
-    const { data: messagesData, isFetching, isSuccess } = useGetApi(
+    // ── initial load ────────────────────────────────────
+    const { data: messagesData, isFetching, isSuccess } = useGetApi<{ messages: IGroupMessage[], hasMore: boolean }>(
         `/groups/${group.id}/messages`,
-        undefined,
+        { limit: 30 },
         { queryKey: `group-messages-${group.id}`, enabled: true, staleTime: 0 }
     )
 
     useEffect(() => {
-        const msgs = (messagesData?.data as any)?.messages ?? []
-        if (msgs.length === 0) return
-        setMessages(msgs)
+        setMessages([])
+        setHasMore(true)
+        setIsLoadingMore(false)
+        
+        if (messagesData?.data) {
+            const msgs = (messagesData?.data as any)?.messages ?? []
+            const more = (messagesData?.data as any)?.hasMore ?? false
+            
+            setMessages(msgs)
+            setHasMore(more)
 
-        // mark all unseen messages as seen
-        const unseenIds = msgs
-            .filter((m: IGroupMessage) => m.sender_id !== authUser?.id)
-            .map((m: IGroupMessage) => m.id)
-        markSeen(unseenIds)
-    }, [messagesData])
+            // mark all unseen messages as seen
+            const unseenIds = msgs
+                .filter((m: IGroupMessage) => m.sender_id !== authUser?.id)
+                .map((m: IGroupMessage) => m.id)
+            if (unseenIds.length > 0) markSeen(unseenIds)
 
-    // ── auto scroll ───────────────────────────────────────────────────────
+            // Scroll to bottom on initial load
+            setTimeout(() => {
+                bottomRef.current?.scrollIntoView()
+            }, 100)
+        }
+    }, [messagesData, group.id])
+
+    // ── fetch more ────────────────────────────────────────────────────────
+    const fetchMoreMessages = async () => {
+        if (!hasMore || isLoadingMore || messages.length === 0) return
+
+        setIsLoadingMore(true)
+        const before = messages[0].id
+        
+        try {
+            const { data: axiosData } = await axiosInstance.get(`/groups/${group.id}/messages`, {
+                params: { before, limit: 30 }
+            })
+            
+            const newMessages = axiosData?.data?.messages ?? []
+            const more = axiosData?.data?.hasMore ?? false
+
+            if (newMessages.length > 0) {
+                const container = scrollContainerRef.current
+                const previousHeight = container?.scrollHeight ?? 0
+
+                setMessages(prev => [...newMessages, ...prev])
+                setHasMore(more)
+
+                requestAnimationFrame(() => {
+                    if (container) {
+                        const newHeight = container.scrollHeight
+                        container.scrollTop = newHeight - previousHeight
+                    }
+                })
+            } else {
+                setHasMore(false)
+            }
+        } catch (error) {
+            console.error("Failed to load more group messages", error)
+        } finally {
+            setIsLoadingMore(false)
+        }
+    }
+
+    // ── intersection observer ─────────────────────────────────────────────
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+                    fetchMoreMessages()
+                }
+            },
+            { threshold: 0.5 }
+        )
+
+        if (topRef.current) {
+            observer.observe(topRef.current)
+        }
+
+        return () => observer.disconnect()
+    }, [hasMore, isLoadingMore, messages])
+
+    // ── auto scroll on new message ────────────────────────────────────────
+    useEffect(() => {
+        const container = scrollContainerRef.current
+        if (!container) return
+
+        const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100
+        const lastMessage = messages[messages.length - 1]
+        const isMine = lastMessage?.sender_id === authUser?.id
+
+        if (isAtBottom || isMine) {
+            bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+        }
     }, [messages])
 
     // ── typing ────────────────────────────────────────────────────────────
@@ -444,7 +527,16 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             </div>
 
             {/* messages area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50 transition-all duration-300">
+            <div 
+                ref={scrollContainerRef}
+                className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50 transition-all duration-300"
+            >
+                <div ref={topRef} className="h-1" />
+                {isLoadingMore && (
+                    <div className="flex justify-center py-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    </div>
+                )}
                 {(isFetching && messages.length === 0) ? (
                     <div className="flex-1 space-y-4 animate-in fade-in duration-500">
                         {[1, 2, 3, 4, 5].map((i) => (
