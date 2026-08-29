@@ -9,11 +9,11 @@ import { getUser } from "@/redux/slices/auth.slice"
 import type { IUser, IConversation } from "@/types"
 import Button from "@/common/Button"
 import { useQueryClient } from "@tanstack/react-query"
-import { 
-    encryptDirectMessage, 
-    decryptDirectMessage, 
-    getSessionKeys, 
-    type EncryptedMessage 
+import {
+    encryptDirectMessage,
+    decryptDirectMessage,
+    getSessionKeys,
+    type EncryptedMessage
 } from "@/utils/crypto"
 
 import Input from "@/common/Input"
@@ -46,7 +46,6 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const [isLoadingMore, setIsLoadingMore] = useState(false)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
     const topRef = useRef<HTMLDivElement>(null)
-    const firstMessageIdRef = useRef<number | null>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
 
     // ── fetch conversation ────────────────────────────────────────────────
@@ -63,10 +62,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const isPending = conversation?.status === 'pending'
     const isRejected = conversation?.status === 'rejected'
     const isAccepted = conversation?.status === 'accepted'
-    
+
     const isIRequester = conversation?.sender_id === authUser?.id
     const isIRecipient = conversation?.receiver_id === authUser?.id
-    
+
     const iBlocked = isIRequester ? conversation?.blocked_by_sender : conversation?.blocked_by_receiver
 
     // If I am the requester and status is rejected, it means THEY rejected ME
@@ -149,7 +148,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             const msgs = Array.isArray(messageData.data)
                 ? messageData.data
                 : (messageData.data as any)?.messages ?? []
-            
+
             const more = (messageData.data as any)?.hasMore ?? false
 
             setMessages(msgs)
@@ -175,12 +174,12 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
 
         setIsLoadingMore(true)
         const before = messages[0].id
-        
+
         try {
             const { data: axiosData } = await axiosInstance.get(`/message/${user.id}`, {
                 params: { before, limit: 30 }
             })
-            
+
             const newMessages = axiosData?.data?.messages ?? []
             const more = axiosData?.data?.hasMore ?? false
 
@@ -246,7 +245,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const handleTyping = (val: string) => {
         setInput(val)
         if (iBlocked || isPending || isRejected) return
-        
+
         emitTypingStart(user.id)
 
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
@@ -344,7 +343,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             </div>
 
             {/* messages */}
-            <div 
+            <div
                 ref={scrollContainerRef}
                 className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50 transition-all duration-300"
             >
@@ -368,11 +367,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             {isPending && isIRecipient ? <ShieldAlert size={32} /> : <MessageSquare size={32} />}
                         </div>
                         <p className="text-sm font-medium text-muted-foreground text-center px-6">
-                            {isPending && isIRecipient 
-                                ? "Accept this request to see messages and start chatting." 
-                                : iAmRejected 
-                                ? "Your message request was not accepted."
-                                : "No messages yet — say hello 👋"}
+                            {isPending && isIRecipient
+                                ? "Accept this request to see messages and start chatting."
+                                : iAmRejected
+                                    ? "Your message request was not accepted."
+                                    : "No messages yet — say hello 👋"}
                         </p>
                     </div>
                 ) : (
@@ -425,9 +424,9 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             <Ban size={18} />
                             You have blocked this user
                         </div>
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
+                        <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => handleToggleBlock(false)}
                             className="rounded-xl border-red-200 text-red-600 hover:bg-red-50"
                         >
@@ -449,24 +448,24 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             <p className="text-xs text-muted-foreground">Accept to start chatting with {user.name}</p>
                         </div>
                         <div className="flex items-center gap-2 w-full max-w-xs">
-                            <Button 
-                                fullWidth 
+                            <Button
+                                fullWidth
                                 onClick={() => handleUpdateStatus('accepted')}
                                 className="rounded-xl h-10 text-xs font-bold"
                             >
                                 <Check size={16} className="mr-2" /> Accept
                             </Button>
-                            <Button 
-                                variant="outline" 
-                                fullWidth 
+                            <Button
+                                variant="outline"
+                                fullWidth
                                 onClick={() => handleUpdateStatus('rejected')}
                                 className="rounded-xl h-10 text-xs font-bold"
                             >
                                 <UserMinus size={16} className="mr-2" /> Reject
                             </Button>
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
+                            <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => handleToggleBlock(true)}
                                 className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-red-500"
                                 title="Block"
@@ -502,9 +501,9 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                 ) : isRejected && isIRecipient ? (
                     <div className="flex flex-col items-center justify-center py-4 space-y-3 bg-muted/50 rounded-2xl border border-border">
                         <p className="text-xs text-muted-foreground font-medium">You rejected this request</p>
-                        <Button 
-                            variant="primary" 
-                            size="sm" 
+                        <Button
+                            variant="primary"
+                            size="sm"
                             onClick={() => handleUpdateStatus('accepted')}
                             className="rounded-xl px-6 h-9 text-xs font-bold"
                         >
