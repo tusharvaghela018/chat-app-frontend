@@ -7,7 +7,7 @@ import {
     Video
 } from "lucide-react";
 
-import { getToken } from "@/redux/slices/auth.slice";
+import { getUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import Button from "@/common/Button";
 import { useGetApi } from "@/hooks/api";
@@ -81,15 +81,15 @@ const ROADMAP = [
 ];
 
 export default function Home() {
-    const token = useSelector(getToken);
+    const user = useSelector(getUser);
     const heroRef = useRef<HTMLDivElement>(null);
 
     const { data: homeData } = useGetApi<{
         info: string;
         stats: { users: number; groups: number; messages: number }
     }>("/home");
-    const { data: usersData } = useGetApi<{ count: number }>("/users", { limit: 1 }, { enabled: !!token });
-    const { data: groupsData } = useGetApi<{ count: number }>("/groups", { limit: 1 }, { enabled: !!token });
+    const { data: usersData } = useGetApi<{ count: number }>("/users", { limit: 1 }, { enabled: !!user });
+    const { data: groupsData } = useGetApi<{ count: number }>("/groups", { limit: 1 }, { enabled: !!user });
 
     const welcomeInfo = homeData?.data?.info || "JWT + Google OAuth, real-time messaging with seen receipts, and a growing suite of features — all in one platform.";
     const userCount = homeData?.data?.stats?.users || usersData?.data?.count || 1200;
@@ -140,7 +140,7 @@ export default function Home() {
                     </p>
 
                     <div className="mt-10 flex flex-wrap justify-center gap-4">
-                        {token ? (
+                        {user ? (
                             <Link to={ROUTES.CHAT.path}>
                                 <Button size="lg" className="rounded-xl px-10 shadow-xl shadow-primary/25 font-bold">
                                     Go to Messages <MessageSquare size={18} className="ml-2" />
@@ -265,12 +265,12 @@ export default function Home() {
                     <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent)]" />
                     <h2 className="font-display text-3xl font-extrabold sm:text-5xl">Ready to start building?</h2>
                     <p className="mx-auto mt-6 max-w-xl text-lg opacity-90 sm:text-xl">
-                        {token
+                        {user
                             ? "Start managing your real-time conversations today."
                             : "Sign up in seconds. Join thousands of developers building the future of real-time applications."}
                     </p>
                     <div className="mt-10 flex flex-wrap justify-center gap-4">
-                        {token ? (
+                        {user ? (
                             <Link to={ROUTES.CHAT.path} className="w-full sm:w-auto">
                                 <Button size="lg" variant="secondary" className="w-full sm:w-auto rounded-xl px-12 font-bold shadow-lg">
                                     Go to Messages <MessageSquare size={18} className="ml-2" />

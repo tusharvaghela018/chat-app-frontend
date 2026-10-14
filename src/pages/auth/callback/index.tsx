@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch } from "react-redux";
 
 import Loader from "@/common/Loader";
-import { setToken, setUser } from "@/redux/slices/auth.slice";
+import { setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import useToast from "@/hooks/toast";
 import { useGetApi } from "@/hooks/api";
@@ -29,28 +29,16 @@ const GoogleCallback = () => {
         }
     }, [token, requires2FA]);
 
-    // ── set token immediately so axiosInstance sends it in headers ────────
-    if (token && !requires2FA) {
-        dispatch(setToken(token));
-    }
-
-    // ── fetch /auth/me — only runs when token exists ──────────────────────
+    // ── fetch /auth/me — uses the httpOnly cookie automatically ──────────
     const { data: meData, isSuccess, isError } = useGetApi<MeResponse>(
         "/auth/me",
         undefined,
         {
             queryKey: 'get-me',
-            enabled: !!token && !requires2FA,   // only fires when token is present and 2FA is not required
-            retry: false,       // don't retry on failure — just redirect to login
+            enabled: !requires2FA,   // fires when 2FA is not required
+            retry: false,            // don't retry on failure — just redirect to login
         }
     )
-
-    useEffect(() => {
-        if (!token) {
-            navigate(ROUTES.LOGIN.path, { replace: true });
-            return;
-        }
-    }, [token])
 
     // ── on success — store user and redirect ──────────────────────────────
     useEffect(() => {

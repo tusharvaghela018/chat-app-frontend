@@ -7,7 +7,7 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 
 import { usePostApi } from "@/hooks/api";
-import { setToken, setUser } from "@/redux/slices/auth.slice";
+import { setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import Button from "@/common/Button";
 import Input from "@/common/Input";
@@ -88,7 +88,6 @@ const Verify2FA = () => {
         "/auth/2fa/login",
         {
             onSuccess: (response) => {
-                dispatch(setToken(response.data?.token || ""));
                 dispatch(setUser(response.data?.user));
                 navigate(ROUTES.CHAT.path);
             },

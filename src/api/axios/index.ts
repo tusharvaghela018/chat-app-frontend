@@ -5,17 +5,8 @@ import { addToast } from "@/redux/slices/toast.slice";
 import { clearLocalSecrets } from "@/utils/indexeddb";
 
 const axiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_URL
-});
-
-axiosInstance.interceptors.request.use((config) => {
-    const token = store.getState().auth.token;
-
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    return config;
+    baseURL: import.meta.env.VITE_API_URL,
+    withCredentials: true
 });
 
 axiosInstance.interceptors.response.use(

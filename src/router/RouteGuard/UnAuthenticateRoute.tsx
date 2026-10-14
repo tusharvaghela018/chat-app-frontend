@@ -2,14 +2,14 @@ import { type PropsWithChildren } from "react"
 import { useSelector } from "react-redux"
 import { Navigate } from "react-router-dom"
 
-import { getToken } from "@/redux/slices/auth.slice"
+import { getUser } from "@/redux/slices/auth.slice"
 import { ROUTES } from "@/constants/routes"
 
 
 const UnAuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
-    const token = useSelector(getToken)
+    const user = useSelector(getUser)
 
-    if (!token) {
+    if (!user) {
         return <>{children}</>
     }
     return <Navigate to={ROUTES.DEFAULT.path} />

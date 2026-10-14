@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react"
 import { io, Socket } from "socket.io-client"
 import { useSelector } from "react-redux"
-import { getToken } from "@/redux/slices/auth.slice"
+import { getUser } from "@/redux/slices/auth.slice"
 
 export const useSocket = (): Socket | null => {
     const [socket, setSocket] = useState<Socket | null>(null)
-    const token = useSelector(getToken)
+    const user = useSelector(getUser)
 
     useEffect(() => {
-        if (!token) return
+        if (!user) return
 
         const newSocket = io(import.meta.env.VITE_API_URL, {
-            auth: { token },
+            withCredentials: true,
         })
 
         newSocket.on("connect", () =>
@@ -26,7 +26,7 @@ export const useSocket = (): Socket | null => {
         return () => {
             newSocket.disconnect()
         }
-    }, [token])
+    }, [user])
 
     return socket
 }

@@ -9,7 +9,7 @@ import axios from "axios";
 import Input from "@/common/Input";
 import Button from "@/common/Button";
 import { usePostApi } from "@/hooks/api";
-import { setToken, setUser } from "@/redux/slices/auth.slice";
+import { setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 
 interface RegisterForm {
@@ -21,7 +21,7 @@ interface RegisterForm {
 }
 
 interface RegisterResponse {
-    token: string;
+    token?: string;
     user: {
         id: number;
         name: string;
@@ -84,7 +84,6 @@ const Register = () => {
                     encrypted_vault,
                     vault_salt
                 };
-                dispatch(setToken(response.data?.token || ""));
                 dispatch(setUser(userData));
                 navigate(ROUTES.CHAT.path);
             },

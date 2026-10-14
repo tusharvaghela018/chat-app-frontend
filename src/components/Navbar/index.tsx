@@ -12,6 +12,7 @@ import { ROUTES } from "@/constants/routes";
 import ThemeToggle from "@/common/ThemeToggle";
 import { clearLocalSecrets } from "@/utils/indexeddb";
 import { clearSessionKeys } from "@/utils/crypto";
+import axiosInstance from "@/api/axios";
 
 const NAV_LINKS = [
     { to: ROUTES.HOME.path, icon: <Home size={18} />, label: 'Home' },
@@ -45,6 +46,11 @@ export default function Navbar() {
     }, [location.pathname]);
 
     const logout = async () => {
+        try {
+            await axiosInstance.post("/auth/logout");
+        } catch {
+            // Ignore error if already logged out
+        }
         await clearLocalSecrets();
         clearSessionKeys();
         dispatch(clearAuth());

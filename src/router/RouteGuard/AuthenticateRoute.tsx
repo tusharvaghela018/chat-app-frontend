@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom"
 import { useSelector, useDispatch } from "react-redux"
 
 import { ROUTES } from "@/constants/routes"
-import { getToken, getUser, setUser } from "@/redux/slices/auth.slice"
+import { getIsAuthenticated, getUser, setUser } from "@/redux/slices/auth.slice"
 import { useGetApi } from "@/hooks/api"
 import type { IUser } from "@/types"
 
@@ -12,8 +12,8 @@ interface MeResponse {
 }
 
 const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
-    const token = useSelector(getToken)
     const user = useSelector(getUser)
+    const isAuthenticated = useSelector(getIsAuthenticated)
     const dispatch = useDispatch()
 
     const { data: meData, isSuccess } = useGetApi<MeResponse>(
@@ -21,7 +21,7 @@ const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
         undefined,
         {
             queryKey: 'get-me',
-            enabled: !!token && !user, // Only fetch if we have a token but NO user data in redux
+            enabled: !user, // Fetch if NO user data in redux
             staleTime: 0, 
         }
     )
@@ -43,7 +43,7 @@ const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
         }
     }, [isSuccess, meData, dispatch])
 
-    if (!token) {
+    if (!isAuthenticated && !user) {
         return <Navigate to={ROUTES.DEFAULT.path} />
     }
 

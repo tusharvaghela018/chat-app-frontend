@@ -15,12 +15,12 @@ interface User {
 }
 
 interface AuthSlice {
-    token: string | null
+    isAuthenticated: boolean
     user: User | null
 }
 
 const initialState: AuthSlice = {
-    token: null,
+    isAuthenticated: false,
     user: null
 }
 
@@ -29,26 +29,36 @@ const authSlice = createSlice(
         name: 'auth',
         initialState,
         reducers: {
-            setToken: (state, action: PayloadAction<string>) => {
-                state.token = action.payload
-            },
-
             setUser: (state, action: PayloadAction<User>) => {
                 state.user = action.payload
+                state.isAuthenticated = true
             },
 
             clearAuth: (state) => {
-                state.token = null
                 state.user = null
+                state.isAuthenticated = false
             }
+        },
+        extraReducers: (builder) => {
+            builder.addCase("persist/REHYDRATE", (state: any, action: any) => {
+                if (action.payload?.auth) {
+                    delete action.payload.auth.token;
+                }
+                if (state && "token" in state) {
+                    delete state.token;
+                }
+            });
         }
     }
 )
 
-export const { setToken, setUser, clearAuth } = authSlice.actions
-
-export const getToken = (state: RootState) => state.auth.token
+export const { setUser, clearAuth } = authSlice.actions
 
 export const getUser = (state: RootState) => state.auth.user
+
+export const getIsAuthenticated = (state: RootState) => state.auth.isAuthenticated || !!state.auth.user
+
+// Kept for backward-compatibility if referenced
+export const getToken = (_state: RootState) => null
 
 export default authSlice.reducer
