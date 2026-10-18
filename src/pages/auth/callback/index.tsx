@@ -6,12 +6,7 @@ import Loader from "@/common/Loader";
 import { setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
 import useToast from "@/hooks/toast";
-import { useGetApi } from "@/hooks/api";
-import type { IUser } from "@/types";
-
-interface MeResponse {
-    user: IUser
-}
+import axiosInstance from "@/api/axios";
 
 const GoogleCallback = () => {
     const [searchParams] = useSearchParams();
@@ -29,42 +24,40 @@ const GoogleCallback = () => {
         }
     }, [token, requires2FA]);
 
-    // ── fetch /auth/me — uses the httpOnly cookie automatically ──────────
-    const { data: meData, isSuccess, isError } = useGetApi<MeResponse>(
-        "/auth/me",
-        undefined,
-        {
-            queryKey: 'get-me',
-            enabled: !requires2FA,   // fires when 2FA is not required
-            retry: false,            // don't retry on failure — just redirect to login
-        }
-    )
-
-    // ── on success — store user and redirect ──────────────────────────────
     useEffect(() => {
-        if (!isSuccess || !meData?.data) return
-        const { id, name, username, email, avatar, is_online, public_key, encrypted_vault, vault_salt } = { ...meData.data.user }
-        const userData = {
-            id: Number(id),
-            name: String(name),
-            username: String(username),
-            email: String(email),
-            avatar: String(avatar),
-            is_online: is_online || false,
-            public_key,
-            encrypted_vault,
-            vault_salt
-        }
-        dispatch(setUser(userData))
-        toast.success("Logged in successfully.")
-        navigate(ROUTES.CHAT.path, { replace: true })
-    }, [isSuccess, meData])
+        if (requires2FA) return;
 
-    // ── on error — /me failed, token was bad ──────────────────────────────
-    useEffect(() => {
-        if (!isError) return
-        navigate(ROUTES.LOGIN.path, { replace: true })
-    }, [isError])
+        const authenticate = async () => {
+            try {
+                if (token) {
+                    // Exchange URL ticket to set first-party httpOnly cookie via proxy
+                    const res = await axiosInstance.post("/auth/exchange", { token });
+                    const user = res.data?.data?.user;
+                    if (user) {
+                        dispatch(setUser(user));
+                        toast.success("Logged in successfully.");
+                        navigate(ROUTES.CHAT.path, { replace: true });
+                        return;
+                    }
+                }
+
+                // If no token param, fetch /auth/me directly
+                const meRes = await axiosInstance.get("/auth/me");
+                const user = meRes.data?.data?.user;
+                if (user) {
+                    dispatch(setUser(user));
+                    toast.success("Logged in successfully.");
+                    navigate(ROUTES.CHAT.path, { replace: true });
+                } else {
+                    navigate(ROUTES.LOGIN.path, { replace: true });
+                }
+            } catch {
+                navigate(ROUTES.LOGIN.path, { replace: true });
+            }
+        };
+
+        authenticate();
+    }, [token, requires2FA]);
 
     return <Loader fullScreen size="lg" />;
 };

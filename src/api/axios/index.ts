@@ -5,7 +5,7 @@ import { addToast } from "@/redux/slices/toast.slice";
 import { clearLocalSecrets } from "@/utils/indexeddb";
 
 const axiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_URL,
+    baseURL: import.meta.env.VITE_API_URL || "/api/backend",
     withCredentials: true
 });
 
@@ -22,7 +22,7 @@ axiosInstance.interceptors.response.use(
     },
     (error) => {
         const status = error.response?.status;
-        const showToast = error?.response?.data?.show_toast
+        const showToast = error?.response?.data?.show_toast;
         const message =
             error?.response?.data?.message || "Something went wrong";
 

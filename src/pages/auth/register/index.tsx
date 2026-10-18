@@ -11,6 +11,7 @@ import Button from "@/common/Button";
 import { usePostApi } from "@/hooks/api";
 import { setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
+import axiosInstance from "@/api/axios";
 
 interface RegisterForm {
     name: string;
@@ -97,7 +98,7 @@ const Register = () => {
     );
 
     const handleGoogleLogin = () => {
-        window.location.href = `${import.meta.env.VITE_API_URL}/auth/google`;
+        window.location.href = `${axiosInstance.defaults.baseURL}/auth/google`;
     };
 
     return (

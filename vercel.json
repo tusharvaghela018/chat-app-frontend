@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/backend/:path*",
+      "destination": "https://chat-app-backend-1-3gl9.onrender.com/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

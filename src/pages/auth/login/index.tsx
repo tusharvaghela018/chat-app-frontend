@@ -13,6 +13,7 @@ import { ROUTES } from "@/constants/routes";
 import axios from "axios";
 import ForgotPasswordModal from "./components/ForgotPasswordModal";
 import { useState } from "react";
+import axiosInstance from "@/api/axios";
 
 interface LoginForm {
     email: string;
@@ -22,12 +23,12 @@ interface LoginForm {
 interface LoginResponse {
     token?: string;
     requires_2fa?: boolean;
-    user: { 
-        id: number; 
-        name: string; 
+    user: {
+        id: number;
+        name: string;
         username: string;
         email: string;
-        is_online: boolean; 
+        is_online: boolean;
         avatar?: string;
         public_key?: string;
         encrypted_vault?: string;
@@ -96,7 +97,7 @@ const Login = () => {
     );
 
     const handleGoogleLogin = () => {
-        window.location.href = `${import.meta.env.VITE_API_URL}/auth/google`;
+        window.location.href = `${axiosInstance.defaults.baseURL}/auth/google`;
     };
 
     return (
