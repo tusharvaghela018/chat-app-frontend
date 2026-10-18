@@ -7,6 +7,8 @@ import { getIsAuthenticated, getUser, setUser } from "@/redux/slices/auth.slice"
 import { useGetApi } from "@/hooks/api"
 import type { IUser } from "@/types"
 
+import Loader from "@/common/Loader"
+
 interface MeResponse {
     user: IUser
 }
@@ -16,13 +18,14 @@ const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
     const isAuthenticated = useSelector(getIsAuthenticated)
     const dispatch = useDispatch()
 
-    const { data: meData, isSuccess } = useGetApi<MeResponse>(
+    const { data: meData, isSuccess, isLoading } = useGetApi<MeResponse>(
         "/auth/me",
         undefined,
         {
             queryKey: 'get-me',
             enabled: !user, // Fetch if NO user data in redux
-            staleTime: 0, 
+            staleTime: 0,
+            retry: false,
         }
     )
 
@@ -43,8 +46,12 @@ const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
         }
     }, [isSuccess, meData, dispatch])
 
+    if (!user && isLoading) {
+        return <Loader fullScreen size="lg" />
+    }
+
     if (!isAuthenticated && !user) {
-        return <Navigate to={ROUTES.DEFAULT.path} />
+        return <Navigate to={ROUTES.LOGIN.path} replace />
     }
 
     return (
