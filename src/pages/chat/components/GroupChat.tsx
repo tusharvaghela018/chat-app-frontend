@@ -388,7 +388,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const { mutate: leaveGroup, isPending: isLeaving } = useDeleteApi(`/groups/${group.id}/leave`)
 
     const handleLeaveConfirm = () => {
-        leaveGroup("" as any, {
+        leaveGroup(undefined, {
             onSuccess: () => {
                 queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
                 setShowLeaveConfirm(false)

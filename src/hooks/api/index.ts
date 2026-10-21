@@ -106,8 +106,10 @@ export const usePatchApi = <TData, TBody = unknown>(
 // ─── DELETE ─────────────────────────────────────────────────────────────────
 
 export type DeleteVars<TId extends string | number = string | number> =
-    | { id: TId; body?: unknown }
-    | TId;
+    | { id?: TId; body?: unknown }
+    | TId
+    | void
+    | undefined;
 
 export const useDeleteApi = <
     TData,
@@ -118,11 +120,25 @@ export const useDeleteApi = <
 ) => {
     return useMutation<ApiResponse<TData>, Error, DeleteVars<TId>>({
         mutationFn: async (vars) => {
-            const id = typeof vars === "object" && "id" in vars ? vars.id : vars;
+            const id =
+                typeof vars === "object" && vars !== null && "id" in vars
+                    ? (vars as { id?: TId }).id
+                    : vars;
             const body =
-                typeof vars === "object" && "id" in vars ? vars.body : undefined;
+                typeof vars === "object" && vars !== null && "body" in vars
+                    ? (vars as { body?: unknown }).body
+                    : undefined;
+
+            const cleanUrl = url.replace(/\/+$/, "");
+            const hasId =
+                id !== undefined &&
+                id !== null &&
+                String(id).trim() !== "" &&
+                typeof id !== "object";
+
+            const endpoint = hasId ? `${cleanUrl}/${id}` : cleanUrl;
             const { data } = await axiosInstance.delete<ApiResponse<TData>>(
-                `${url}/${id}`,
+                endpoint,
                 { data: body }
             );
             return data;
