@@ -9,6 +9,8 @@ export const CHAT_EVENTS = {
     MESSAGES_SEEN: "messages_seen",
     TYPING: "typing",
     TYPING_STOP: "typing_stop",
+    CONVERSATION_STATUS_UPDATED: "conversation_status_updated",
+    NEW_REQUEST: "new_request",
 } as const
 
 export const GROUP_EVENTS = {

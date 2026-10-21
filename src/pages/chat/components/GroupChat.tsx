@@ -330,7 +330,12 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const handleSend = () => {
         if (!input.trim()) return
 
-        let finalContent = input
+        const text = input.trim()
+        setInput("")
+        emitTypingStop()
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+
+        let finalContent = text
         let encryptedKeys: Record<number, EncryptedMessage> = {}
 
         const membersWithPK = groupDetail?.members?.filter(m => !!m.user?.public_key)
@@ -340,7 +345,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             const groupKey = generateGroupKey()
 
             // 2. Encrypt Payload
-            const encryptedPayload = encryptGroupPayload(input, groupKey)
+            const encryptedPayload = encryptGroupPayload(text, groupKey)
             finalContent = JSON.stringify(encryptedPayload)
 
             // 3. Encrypt Group Key for each member
@@ -355,10 +360,23 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             })
         }
 
-        sendMessage(finalContent, encryptedKeys)
-        emitTypingStop()
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-        setInput("")
+        const optimisticMsg: IGroupMessage = {
+            id: -Date.now(),
+            group_id: group.id,
+            sender_id: authUser?.id ?? null,
+            content: finalContent,
+            type: "text",
+            encrypted_keys: encryptedKeys,
+            created_at: new Date().toISOString(),
+            is_pending: true,
+            sender: {
+                id: authUser?.id ?? 0,
+                name: authUser?.name ?? "Me",
+                avatar: authUser?.avatar ?? null,
+            }
+        }
+
+        sendMessage(finalContent, encryptedKeys, optimisticMsg)
     }
 
     const liveGroup = liveData?.data?.group ?? group
@@ -641,7 +659,12 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                         <Input
                             value={input}
                             onChange={(e) => handleTyping(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault()
+                                    handleSend()
+                                }
+                            }}
                             placeholder={`Message ${liveGroup.name}...`}
                             containerClassName="flex-1"
                             inputClassName="rounded-2xl h-11"

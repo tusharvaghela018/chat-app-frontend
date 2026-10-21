@@ -31,17 +31,14 @@ const E2EEInitializer = () => {
     useEffect(() => {
         const initializeKeys = async () => {
             if (!user || initialized) return;
-            
+
             // Skip showing modals on privacy policy page
             if (location.pathname === ROUTES.PRIVACY_POLICY.path) {
                 return;
             }
 
-            console.log("[E2EE] Checking keys for user:", user.email);
-
             // 1. Check if keys already in memory (this session)
             if (getSessionKeys()) {
-                console.log("[E2EE] Keys found in memory.");
                 setInitialized(true);
                 return;
             }
@@ -50,17 +47,14 @@ const E2EEInitializer = () => {
             const localPrivateKey = await getLocalPrivateKey();
 
             if (localPrivateKey && user.public_key && !isResetting) {
-                console.log("[E2EE] Keys found in IndexedDB. Restoring session.");
                 setSessionKeys({
                     publicKey: user.public_key,
                     secretKey: localPrivateKey
                 });
                 setInitialized(true);
             } else if (user.encrypted_vault && user.vault_salt && user.public_key && !isResetting) {
-                console.log("[E2EE] Vault found on server. Prompting for UNLOCK.");
                 setShowUnlock(true);
             } else {
-                console.log("[E2EE] No security data found (or resetting). Prompting for SETUP.");
                 setShowSetup(true);
             }
         };
@@ -78,8 +72,8 @@ const E2EEInitializer = () => {
         }, {
             onSuccess: () => {
                 if (user) {
-                    dispatch(setUser({ 
-                        ...user, 
+                    dispatch(setUser({
+                        ...user,
                         public_key: data.public_key,
                         encrypted_vault: data.encrypted_vault,
                         vault_salt: data.vault_salt
@@ -107,11 +101,11 @@ const E2EEInitializer = () => {
 
     return (
         <>
-            <SetupVaultModal 
-                open={showSetup} 
-                onComplete={handleSetupComplete} 
+            <SetupVaultModal
+                open={showSetup}
+                onComplete={handleSetupComplete}
             />
-            
+
             {user.encrypted_vault && user.vault_salt && user.public_key && (
                 <UnlockVaultModal
                     open={showUnlock}

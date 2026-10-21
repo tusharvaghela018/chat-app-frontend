@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Search, MessageSquare, ShieldAlert, Ban } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useGetApi } from "@/hooks/api"
 import useDebounce from "@/hooks/debounce"
+import { useSocket } from "@/hooks/socket"
+import { CHAT_EVENTS } from "@/pages/chat/constants"
 import { useSelector } from "react-redux"
 import { getUser } from "@/redux/slices/auth.slice"
 import type { IUser, IConversation } from "@/types"
@@ -27,8 +30,30 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
     const [userList, setUserList] = useState<IUser[]>([])
     const bottomRef = useRef<HTMLDivElement>(null)
 
+    const socket = useSocket()
+    const queryClient = useQueryClient()
+
     const debouncedSearch = useDebounce(search, 400)
     const isSearching = debouncedSearch.length > 0
+
+    // ── socket updates ────────────────────────────────────────────────────
+    useEffect(() => {
+        if (!socket) return
+
+        const onRefresh = () => {
+            queryClient.invalidateQueries({ queryKey: ['conversations'] })
+        }
+
+        socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, onRefresh)
+        socket.on(CHAT_EVENTS.NEW_REQUEST, onRefresh)
+        socket.on(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onRefresh)
+
+        return () => {
+            socket.off(CHAT_EVENTS.RECEIVE_MESSAGE, onRefresh)
+            socket.off(CHAT_EVENTS.NEW_REQUEST, onRefresh)
+            socket.off(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onRefresh)
+        }
+    }, [socket, queryClient])
 
     // ── fetch conversations (when NOT searching) ──────────────────────────
     const { data: convData, isFetching: isFetchingConvs } = useGetApi<IConversation[]>(

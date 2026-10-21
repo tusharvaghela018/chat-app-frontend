@@ -26,6 +26,7 @@ interface IMessage {
     conversation_id: number
     created_at: string
     is_seen?: boolean
+    is_pending?: boolean
 }
 
 interface Props {
@@ -74,11 +75,73 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const { mutate: updateStatus } = usePatchApi(`/conversations/${conversation?.id}/status`)
     const { mutate: updateBlock } = usePatchApi(`/conversations/${conversation?.id}/block`)
 
+    // ── initial load ─────────────────────────────────────────────────────
+    const { data: messageData, isFetching, isSuccess, refetch: refetchMessages } = useGetApi<{ messages: IMessage[], hasMore: boolean }>(
+        `/message/${user.id}`,
+        { limit: 30 },
+        {
+            queryKey: `messages-${user.id}`,
+            enabled: !!user.id,
+            staleTime: 0,
+        }
+    )
+
+    const {
+        messages,
+        setMessages,
+        isTyping,
+        activeConvRef,
+        sendMessage,
+        emitMarkSeen,
+        emitTypingStart,
+        emitTypingStop,
+    } = useChat({
+        socket,
+        selectedUserId: user.id,
+        currentUserId: authUser?.id ?? null,
+        onStatusUpdated: (data) => {
+            queryClient.invalidateQueries({ queryKey: [`conversation-${user.id}`] })
+            queryClient.invalidateQueries({ queryKey: ['conversations'] })
+            queryClient.invalidateQueries({ queryKey: [`messages-${user.id}`] })
+            if (data.status === 'accepted') {
+                refetchMessages().then((res) => {
+                    if (res?.data?.data) {
+                        const msgs = Array.isArray(res.data.data)
+                            ? res.data.data
+                            : (res.data.data as any)?.messages ?? []
+                        setMessages(msgs)
+                        const conversationId = msgs[0]?.conversation_id ?? conversation?.id ?? null
+                        activeConvRef.current = conversationId
+                        if (conversationId && socket && !iBlocked) {
+                            emitMarkSeen(conversationId, user.id)
+                        }
+                    }
+                })
+            }
+        }
+    })
+
     const handleUpdateStatus = (status: 'accepted' | 'rejected') => {
         updateStatus({ body: { status } }, {
-            onSuccess: () => {
-                queryClient.invalidateQueries({ queryKey: [`conversation-${user.id}`] })
-                queryClient.invalidateQueries({ queryKey: ['conversations'] })
+            onSuccess: async () => {
+                await queryClient.invalidateQueries({ queryKey: [`conversation-${user.id}`] })
+                await queryClient.invalidateQueries({ queryKey: ['conversations'] })
+                await queryClient.invalidateQueries({ queryKey: [`messages-${user.id}`] })
+
+                if (status === 'accepted') {
+                    const res = await refetchMessages()
+                    if (res?.data?.data) {
+                        const msgs = Array.isArray(res.data.data)
+                            ? res.data.data
+                            : (res.data.data as any)?.messages ?? []
+                        setMessages(msgs)
+                        const conversationId = msgs[0]?.conversation_id ?? conversation?.id ?? null
+                        activeConvRef.current = conversationId
+                        if (conversationId && socket && !iBlocked) {
+                            emitMarkSeen(conversationId, user.id)
+                        }
+                    }
+                }
             }
         })
     }
@@ -108,32 +171,6 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             return msg.content
         }
     }
-
-    const {
-        messages,
-        setMessages,
-        isTyping,
-        activeConvRef,
-        sendMessage,
-        emitMarkSeen,
-        emitTypingStart,
-        emitTypingStop,
-    } = useChat({
-        socket,
-        selectedUserId: user.id,
-        currentUserId: authUser?.id ?? null,
-    })
-
-    // ── initial load ─────────────────────────────────────────────────────
-    const { data: messageData, isFetching, isSuccess } = useGetApi<{ messages: IMessage[], hasMore: boolean }>(
-        `/message/${user.id}`,
-        { limit: 30 },
-        {
-            queryKey: `messages-${user.id}`,
-            enabled: !!user.id,
-            staleTime: 0,
-        }
-    )
 
     // ── sync state ────────────────────────────────────────
     useEffect(() => {
@@ -258,17 +295,29 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const handleSend = () => {
         if (!input.trim() || iBlocked || iAmRejected) return
 
-        let finalContent = input
+        const plainText = input.trim()
+        setInput("")
+        emitTypingStop(user.id)
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+
+        let finalContent = plainText
         if (user.public_key && myKeys) {
-            const encrypted = encryptDirectMessage(input, user.public_key, myKeys.secretKey)
+            const encrypted = encryptDirectMessage(plainText, user.public_key, myKeys.secretKey)
             finalContent = JSON.stringify(encrypted)
         }
 
-        sendMessage(user.id, finalContent)
-        emitTypingStop(user.id)
+        const optimisticMsg: IMessage = {
+            id: -Date.now(),
+            content: finalContent,
+            sender_id: authUser?.id ?? 0,
+            receiver_id: user.id,
+            conversation_id: activeConvRef.current || conversation?.id || 0,
+            created_at: new Date().toISOString(),
+            is_seen: false,
+            is_pending: true,
+        }
 
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-        setInput("")
+        sendMessage(user.id, finalContent, optimisticMsg)
     }
 
     return (
@@ -401,8 +450,14 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                 {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                             {isMine && (
-                                                <span className="text-[10px]">
-                                                    {msg.is_seen ? "✓✓" : "✓"}
+                                                <span className="text-[10px] ml-0.5">
+                                                    {msg.id < 0 || msg.is_pending ? (
+                                                        <span className="inline-block animate-pulse text-[9px] opacity-70">●</span>
+                                                    ) : msg.is_seen ? (
+                                                        "✓✓"
+                                                    ) : (
+                                                        "✓"
+                                                    )}
                                                 </span>
                                             )}
                                         </div>
@@ -484,7 +539,12 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             <Input
                                 value={input}
                                 onChange={(e) => handleTyping(e.target.value)}
-                                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                        e.preventDefault()
+                                        handleSend()
+                                    }
+                                }}
                                 placeholder={`Message ${user.name}...`}
                                 containerClassName="flex-1"
                                 inputClassName="rounded-2xl h-11"
@@ -515,7 +575,12 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                         <Input
                             value={input}
                             onChange={(e) => handleTyping(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault()
+                                    handleSend()
+                                }
+                            }}
                             placeholder={`Message ${user.name}...`}
                             containerClassName="flex-1"
                             inputClassName="rounded-2xl h-11"

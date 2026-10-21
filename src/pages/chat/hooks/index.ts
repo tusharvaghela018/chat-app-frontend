@@ -5,7 +5,7 @@ import { GROUP_EVENTS } from "@/pages/chat/constants"
 import type { EncryptedMessage } from "@/utils/crypto"
 
 
-interface IMessage {
+export interface IMessage {
     id: number
     content: string
     sender_id: number
@@ -13,12 +13,14 @@ interface IMessage {
     conversation_id: number
     created_at: string
     is_seen?: boolean
+    is_pending?: boolean
 }
 
 interface UseChatProps {
     socket: Socket | null
     selectedUserId: number | null
     currentUserId: number | null
+    onStatusUpdated?: (data: { conversationId: number; status: string; senderId: number; receiverId: number }) => void
 }
 
 interface UseChatReturn {
@@ -26,7 +28,7 @@ interface UseChatReturn {
     setMessages: React.Dispatch<React.SetStateAction<IMessage[]>>
     isTyping: boolean
     activeConvRef: React.MutableRefObject<number | null>
-    sendMessage: (receiverId: number, content: string) => void
+    sendMessage: (receiverId: number, content: string, optimisticMsg?: IMessage) => void
     emitMarkSeen: (conversationId: number, senderId: number) => void
     emitTypingStart: (receiverId: number) => void
     emitTypingStop: (receiverId: number) => void
@@ -36,6 +38,7 @@ export const useChat = ({
     socket,
     selectedUserId,
     currentUserId,
+    onStatusUpdated,
 }: UseChatProps): UseChatReturn => {
     const [messages, setMessages] = useState<IMessage[]>([])
     const [isTyping, setIsTyping] = useState(false)
@@ -69,7 +72,23 @@ export const useChat = ({
             // wrong conversation is open — ignore completely, do NOT mark seen
             if (msg.conversation_id !== activeConvRef.current) return
 
-            setMessages((prev) => [...prev, msg])
+            setMessages((prev) => {
+                // If it's our own message emitted back by server, reconcile pending optimistic message
+                if (msg.sender_id === currentUserId) {
+                    const pendingIndex = prev.findIndex(
+                        (m) => m.id < 0 && (m.content === msg.content || m.receiver_id === msg.receiver_id)
+                    )
+                    if (pendingIndex !== -1) {
+                        const next = [...prev]
+                        next[pendingIndex] = msg
+                        return next
+                    }
+                    if (prev.some((m) => m.id === msg.id)) return prev
+                } else {
+                    if (prev.some((m) => m.id === msg.id)) return prev
+                }
+                return [...prev, msg]
+            })
 
             // ✅ only mark seen if the sender is the person currently open
             // if user_b is chatting with user_c, messages from user_a are NOT marked seen
@@ -102,20 +121,30 @@ export const useChat = ({
             setIsTyping(data.isTyping)
         }
 
+        // ── conversation status updated ───────────────────────────────────
+        const onConversationStatusUpdated = (data: { conversationId: number; status: string; senderId: number; receiverId: number }) => {
+            onStatusUpdated?.(data)
+        }
+
         socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, onReceiveMessage)
         socket.on(CHAT_EVENTS.MESSAGES_SEEN, onMessagesSeen)
         socket.on(CHAT_EVENTS.TYPING, onTyping)
+        socket.on(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onConversationStatusUpdated)
 
         return () => {
             socket.off(CHAT_EVENTS.RECEIVE_MESSAGE, onReceiveMessage)
             socket.off(CHAT_EVENTS.MESSAGES_SEEN, onMessagesSeen)
             socket.off(CHAT_EVENTS.TYPING, onTyping)
+            socket.off(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onConversationStatusUpdated)
         }
-    }, [socket])
+    }, [socket, currentUserId, onStatusUpdated])
 
     // ── emit helpers ──────────────────────────────────────────────────────
 
-    const sendMessage = (receiverId: number, content: string) => {
+    const sendMessage = (receiverId: number, content: string, optimisticMsg?: IMessage) => {
+        if (optimisticMsg) {
+            setMessages((prev) => [...prev, optimisticMsg])
+        }
         socket?.emit(CHAT_EVENTS.SEND_MESSAGE, { receiverId, content })
     }
 
@@ -151,6 +180,7 @@ export interface IGroupMessage {
     type: "text" | "system"
     encrypted_keys?: Record<number, EncryptedMessage>
     created_at: string
+    is_pending?: boolean
     sender?: {
         id: number
         name: string
@@ -181,7 +211,18 @@ export const useGroupChat = ({ socket, groupId, onMemberJoined, onMemberLeft }: 
 
         const handleReceiveMessage = (message: IGroupMessage) => {
             if (message.group_id !== groupId) return
-            setMessages((prev) => [...prev, message])
+            setMessages((prev) => {
+                const pendingIndex = prev.findIndex(
+                    (m) => m.id < 0 && (m.content === message.content || m.sender_id === message.sender_id)
+                )
+                if (pendingIndex !== -1) {
+                    const next = [...prev]
+                    next[pendingIndex] = message
+                    return next
+                }
+                if (prev.some((m) => m.id === message.id)) return prev
+                return [...prev, message]
+            })
         }
 
         const handleTyping = ({
@@ -247,8 +288,11 @@ export const useGroupChat = ({ socket, groupId, onMemberJoined, onMemberLeft }: 
     }, [groupId])
 
     // ── send message ──────────────────────────────────────────────────────
-    const sendMessage = (content: string, encrypted_keys?: any) => {
+    const sendMessage = (content: string, encrypted_keys?: any, optimisticMsg?: IGroupMessage) => {
         if (!socket || !content.trim()) return
+        if (optimisticMsg) {
+            setMessages((prev) => [...prev, optimisticMsg])
+        }
         socket.emit(GROUP_EVENTS.SEND_MESSAGE, { groupId, content, encrypted_keys })
     }
 
