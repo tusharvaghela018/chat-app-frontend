@@ -20,6 +20,7 @@ interface UseChatProps {
     socket: Socket | null
     selectedUserId: number | null
     currentUserId: number | null
+    initialMessages?: IMessage[]
     onStatusUpdated?: (data: { conversationId: number; status: string; senderId: number; receiverId: number }) => void
 }
 
@@ -38,9 +39,10 @@ export const useChat = ({
     socket,
     selectedUserId,
     currentUserId,
+    initialMessages,
     onStatusUpdated,
 }: UseChatProps): UseChatReturn => {
-    const [messages, setMessages] = useState<IMessage[]>([])
+    const [messages, setMessages] = useState<IMessage[]>(initialMessages ?? [])
     const [isTyping, setIsTyping] = useState(false)
 
     const activeConvRef = useRef<number | null>(null)
@@ -196,12 +198,13 @@ interface TypingUser {
 interface UseGroupChatProps {
     socket: Socket | null
     groupId: number
+    initialMessages?: IGroupMessage[]
     onMemberJoined?: () => void
     onMemberLeft?: () => void
 }
 
-export const useGroupChat = ({ socket, groupId, onMemberJoined, onMemberLeft }: UseGroupChatProps) => {
-    const [messages, setMessages] = useState<IGroupMessage[]>([])
+export const useGroupChat = ({ socket, groupId, initialMessages, onMemberJoined, onMemberLeft }: UseGroupChatProps) => {
+    const [messages, setMessages] = useState<IGroupMessage[]>(initialMessages ?? [])
     const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
     const typingTimeoutRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
 

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react"
 import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy, Send, ChevronLeft, X, Lock, Loader2 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
@@ -138,6 +138,10 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const scrollContainerRef = useRef<HTMLDivElement>(null)
     const topRef = useRef<HTMLDivElement>(null)
 
+    const isInitialScrollDone = useRef(false)
+    const lastMessageIdRef = useRef<number | null>(null)
+    const decryptCache = useRef<Map<string, string | null>>(new Map())
+
     const queryClient = useQueryClient()
 
     const [showInfo, setShowInfo] = useState(false)
@@ -152,6 +156,15 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const [copied, setCopied] = useState(false)
     const [showJoinRequests, setShowJoinRequests] = useState(false)
 
+    // ── initial load ────────────────────────────────────
+    const { data: messagesData, isFetching, isSuccess } = useGetApi<{ messages: IGroupMessage[], hasMore: boolean }>(
+        `/groups/${group.id}/messages`,
+        { limit: 30 },
+        { queryKey: `group-messages-${group.id}`, enabled: true, staleTime: 30 * 1000 }
+    )
+
+    const initialMsgs = (messagesData?.data as any)?.messages ?? []
+
     const {
         messages,
         setMessages,
@@ -163,6 +176,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     } = useGroupChat({
         socket,
         groupId: group.id,
+        initialMessages: initialMsgs,
         onMemberJoined: () => {
             queryClient.invalidateQueries({ queryKey: [`group-${group.id}`] })
             queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
@@ -184,9 +198,15 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
 
     const groupDetail = liveData?.data?.group as IGroup | undefined
 
-    // Helper to decrypt messages
-    const decryptMessage = (msg: IGroupMessage) => {
+    // Helper to decrypt messages with O(1) caching
+    const decryptMessage = useCallback((msg: IGroupMessage) => {
         if (msg.type === "system") return msg.content
+        const cacheKey = `${msg.id}_${msg.content}`
+        if (decryptCache.current.has(cacheKey)) {
+            return decryptCache.current.get(cacheKey)!
+        }
+
+        let decrypted: string | null = msg.content
         try {
             const parsed = JSON.parse(msg.content) as EncryptedMessage
             if (parsed.c && parsed.n && myKeys && msg.encrypted_keys) {
@@ -204,27 +224,18 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                 if (!groupKey) return null
 
                 // 2. Decrypt the payload
-                const decrypted = decryptGroupPayload(parsed, groupKey)
-                return decrypted // returns string or null
+                decrypted = decryptGroupPayload(parsed, groupKey)
             }
-            return msg.content
         } catch (e) {
-            return msg.content // Not encrypted or fallback
+            decrypted = msg.content // Not encrypted or fallback
         }
-    }
 
-    // ── initial load ────────────────────────────────────
-    const { data: messagesData, isFetching, isSuccess } = useGetApi<{ messages: IGroupMessage[], hasMore: boolean }>(
-        `/groups/${group.id}/messages`,
-        { limit: 30 },
-        { queryKey: `group-messages-${group.id}`, enabled: true, staleTime: 0 }
-    )
+        decryptCache.current.set(cacheKey, decrypted)
+        return decrypted
+    }, [groupDetail?.members, myKeys, authUser?.id])
 
+    // ── sync state when messagesData arrives/updates ─────
     useEffect(() => {
-        setMessages([])
-        setHasMore(true)
-        setIsLoadingMore(false)
-        
         if (messagesData?.data) {
             const msgs = (messagesData?.data as any)?.messages ?? []
             const more = (messagesData?.data as any)?.hasMore ?? false
@@ -237,13 +248,35 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                 .filter((m: IGroupMessage) => m.sender_id !== authUser?.id)
                 .map((m: IGroupMessage) => m.id)
             if (unseenIds.length > 0) markSeen(unseenIds)
-
-            // Scroll to bottom on initial load
-            setTimeout(() => {
-                bottomRef.current?.scrollIntoView()
-            }, 100)
         }
-    }, [messagesData, group.id])
+    }, [messagesData, group.id, authUser?.id])
+
+    // Instant synchronous scroll to bottom before paint on initial load
+    useLayoutEffect(() => {
+        if (messages.length > 0 && !isInitialScrollDone.current) {
+            const container = scrollContainerRef.current
+            if (container) {
+                container.scrollTop = container.scrollHeight
+                isInitialScrollDone.current = true
+                lastMessageIdRef.current = messages[messages.length - 1]?.id ?? null
+            }
+        }
+    }, [messages])
+
+    // Backup rAF for layout adjustments
+    useEffect(() => {
+        if (messages.length > 0 && !isInitialScrollDone.current) {
+            const raf = requestAnimationFrame(() => {
+                const container = scrollContainerRef.current
+                if (container) {
+                    container.scrollTop = container.scrollHeight
+                    isInitialScrollDone.current = true
+                    lastMessageIdRef.current = messages[messages.length - 1]?.id ?? null
+                }
+            })
+            return () => cancelAnimationFrame(raf)
+        }
+    }, [messages])
 
     // ── fetch more ────────────────────────────────────────────────────────
     const fetchMoreMessages = async () => {
@@ -301,19 +334,24 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         return () => observer.disconnect()
     }, [hasMore, isLoadingMore, messages])
 
-    // ── auto scroll on new message ────────────────────────────────────────
+    // ── auto scroll on new message appended ───────────────
     useEffect(() => {
         const container = scrollContainerRef.current
-        if (!container) return
+        if (!container || !isInitialScrollDone.current) return
 
-        const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100
         const lastMessage = messages[messages.length - 1]
-        const isMine = lastMessage?.sender_id === authUser?.id
+        const isNewLastMessage = lastMessage && lastMessage.id !== lastMessageIdRef.current
+        lastMessageIdRef.current = lastMessage?.id ?? null
 
-        if (isAtBottom || isMine) {
-            bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+        if (isNewLastMessage) {
+            const isMine = lastMessage.sender_id === authUser?.id
+            const isNearBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 150
+
+            if (isMine || isNearBottom) {
+                bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+            }
         }
-    }, [messages])
+    }, [messages, authUser?.id])
 
     // ── typing ────────────────────────────────────────────────────────────
     const handleTyping = (val: string) => {
@@ -547,7 +585,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             {/* messages area */}
             <div 
                 ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50 transition-all duration-300"
+                className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-background/50"
             >
                 <div ref={topRef} className="h-1" />
                 {isLoadingMore && (
@@ -556,10 +594,10 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                     </div>
                 )}
                 {(isFetching && messages.length === 0) ? (
-                    <div className="flex-1 space-y-4 animate-in fade-in duration-500">
-                        {[1, 2, 3, 4, 5].map((i) => (
+                    <div className="flex-1 space-y-3 p-2 animate-in fade-in duration-300">
+                        {[1, 2, 3, 4, 5, 6].map((i) => (
                             <div key={i} className={`flex ${i % 3 === 0 ? "justify-end" : "justify-start"}`}>
-                                <div className={`h-12 w-2/3 max-w-[250px] rounded-2xl bg-muted/40 animate-pulse ${i % 3 === 0 ? "rounded-br-none" : "rounded-bl-none"}`} />
+                                <div className={`h-11 ${i % 3 === 0 ? "w-44" : i % 2 === 0 ? "w-60" : "w-36"} rounded-2xl bg-muted/40 animate-pulse ${i % 3 === 0 ? "rounded-br-none" : "rounded-bl-none"}`} />
                             </div>
                         ))}
                     </div>
@@ -589,10 +627,12 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                             const decryptedContent = decryptMessage(msg)
                             if (decryptedContent === null) return null
 
+                            const shouldAnimate = isInitialScrollDone.current && (msg.is_pending || msg.id < 0)
+
                             return (
                                 <div
                                     key={msg.id}
-                                    className={`flex ${isMine ? "justify-end" : "justify-start"} gap-2 animate-in slide-in-from-bottom-2 duration-300`}
+                                    className={`flex ${isMine ? "justify-end" : "justify-start"} gap-2 ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
                                 >
                                     {!isMine && (
                                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-[10px] mt-1 shadow-inner overflow-hidden">

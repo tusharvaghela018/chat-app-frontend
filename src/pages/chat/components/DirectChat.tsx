@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react"
 import { useSelector } from "react-redux"
 import { User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert, Ban, Check, UserMinus, Loader2 } from "lucide-react"
 import { useGetApi, usePatchApi } from "@/hooks/api"
@@ -49,6 +49,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const topRef = useRef<HTMLDivElement>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
 
+    const isInitialScrollDone = useRef(false)
+    const lastMessageIdRef = useRef<number | null>(null)
+    const decryptCache = useRef<Map<string, string | null>>(new Map())
+
     // ── fetch conversation ────────────────────────────────────────────────
     const { data: convData } = useGetApi<IConversation>(
         `/conversations/user/${user.id}`,
@@ -82,9 +86,13 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         {
             queryKey: `messages-${user.id}`,
             enabled: !!user.id,
-            staleTime: 0,
+            staleTime: 30 * 1000,
         }
     )
+
+    const initialMsgs = (Array.isArray(messageData?.data)
+        ? messageData.data
+        : (messageData?.data as any)?.messages) ?? []
 
     const {
         messages,
@@ -99,6 +107,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         socket,
         selectedUserId: user.id,
         currentUserId: authUser?.id ?? null,
+        initialMessages: initialMsgs,
         onStatusUpdated: (data) => {
             queryClient.invalidateQueries({ queryKey: [`conversation-${user.id}`] })
             queryClient.invalidateQueries({ queryKey: ['conversations'] })
@@ -110,6 +119,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             ? res.data.data
                             : (res.data.data as any)?.messages ?? []
                         setMessages(msgs)
+                        isInitialScrollDone.current = false
                         const conversationId = msgs[0]?.conversation_id ?? conversation?.id ?? null
                         activeConvRef.current = conversationId
                         if (conversationId && socket && !iBlocked) {
@@ -135,6 +145,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             ? res.data.data
                             : (res.data.data as any)?.messages ?? []
                         setMessages(msgs)
+                        isInitialScrollDone.current = false
                         const conversationId = msgs[0]?.conversation_id ?? conversation?.id ?? null
                         activeConvRef.current = conversationId
                         if (conversationId && socket && !iBlocked) {
@@ -155,32 +166,32 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         })
     }
 
-    // Helper to decrypt messages
-    const decryptMessage = (msg: IMessage) => {
+    // Helper to decrypt messages with O(1) per-message caching
+    const decryptMessage = useCallback((msg: IMessage) => {
+        const cacheKey = `${msg.id}_${msg.content}`
+        if (decryptCache.current.has(cacheKey)) {
+            return decryptCache.current.get(cacheKey)!
+        }
+
+        let decrypted: string | null = msg.content
         try {
             const parsed = JSON.parse(msg.content) as EncryptedMessage
             if (parsed.c && parsed.n && myKeys) {
                 const senderPublicKey = user.public_key
-                if (!senderPublicKey) return null;
+                if (!senderPublicKey) return null
 
-                const decrypted = decryptDirectMessage(parsed, senderPublicKey, myKeys.secretKey)
-                return decrypted // returns string or null
+                decrypted = decryptDirectMessage(parsed, senderPublicKey, myKeys.secretKey)
             }
-            return msg.content
-        } catch (e) {
-            return msg.content
+        } catch {
+            decrypted = msg.content
         }
-    }
 
-    // ── sync state ────────────────────────────────────────
+        decryptCache.current.set(cacheKey, decrypted)
+        return decrypted
+    }, [user.public_key, myKeys])
+
+    // ── sync state when messageData arrives/updates ──────
     useEffect(() => {
-        setMessages([])
-        setHasMore(true)
-        setIsLoadingMore(false)
-        setInput("")
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-        emitTypingStop(user.id)
-
         if (messageData?.data) {
             const msgs = Array.isArray(messageData.data)
                 ? messageData.data
@@ -197,13 +208,35 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             if (conversationId && socket && !iBlocked && isAccepted) {
                 emitMarkSeen(conversationId, user.id)
             }
-
-            // Scroll to bottom on initial load
-            setTimeout(() => {
-                bottomRef.current?.scrollIntoView()
-            }, 100)
         }
-    }, [user.id, messageData, socket, iBlocked, isAccepted])
+    }, [messageData, socket, iBlocked, isAccepted, user.id])
+
+    // Instant synchronous scroll to bottom before paint on initial load
+    useLayoutEffect(() => {
+        if (messages.length > 0 && !isInitialScrollDone.current) {
+            const container = scrollContainerRef.current
+            if (container) {
+                container.scrollTop = container.scrollHeight
+                isInitialScrollDone.current = true
+                lastMessageIdRef.current = messages[messages.length - 1]?.id ?? null
+            }
+        }
+    }, [messages])
+
+    // Backup rAF for images/fonts layout adjustment
+    useEffect(() => {
+        if (messages.length > 0 && !isInitialScrollDone.current) {
+            const raf = requestAnimationFrame(() => {
+                const container = scrollContainerRef.current
+                if (container) {
+                    container.scrollTop = container.scrollHeight
+                    isInitialScrollDone.current = true
+                    lastMessageIdRef.current = messages[messages.length - 1]?.id ?? null
+                }
+            })
+            return () => cancelAnimationFrame(raf)
+        }
+    }, [messages])
 
     // ── fetch more ────────────────────────────────────────────────────────
     const fetchMoreMessages = async () => {
@@ -263,20 +296,24 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         return () => observer.disconnect()
     }, [hasMore, isLoadingMore, messages])
 
-    // ── auto scroll on new message ────────────────────────────────────────
+    // ── auto scroll on new message appended ───────────────
     useEffect(() => {
-        // Only auto-scroll to bottom if we're near the bottom or it's a new message from US
         const container = scrollContainerRef.current
-        if (!container) return
+        if (!container || !isInitialScrollDone.current) return
 
-        const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100
         const lastMessage = messages[messages.length - 1]
-        const isMine = lastMessage?.sender_id === authUser?.id
+        const isNewLastMessage = lastMessage && lastMessage.id !== lastMessageIdRef.current
+        lastMessageIdRef.current = lastMessage?.id ?? null
 
-        if (isAtBottom || isMine) {
-            bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+        if (isNewLastMessage) {
+            const isMine = lastMessage.sender_id === authUser?.id
+            const isNearBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 150
+
+            if (isMine || isNearBottom) {
+                bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+            }
         }
-    }, [messages])
+    }, [messages, authUser?.id])
 
     // ── typing ────────────────────────────────────────────────────────────
     const handleTyping = (val: string) => {
@@ -394,7 +431,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             {/* messages */}
             <div
                 ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/50 transition-all duration-300"
+                className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-background/50"
             >
                 <div ref={topRef} className="h-1" />
                 {isLoadingMore && (
@@ -403,10 +440,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                     </div>
                 )}
                 {(isFetching && messages.length === 0) ? (
-                    <div className="flex-1 space-y-4 animate-in fade-in duration-500">
-                        {[1, 2, 3, 4, 5].map((i) => (
+                    <div className="flex-1 space-y-3 p-2 animate-in fade-in duration-300">
+                        {[1, 2, 3, 4, 5, 6].map((i) => (
                             <div key={i} className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}>
-                                <div className={`h-12 w-2/3 max-w-[250px] rounded-2xl bg-muted/40 animate-pulse ${i % 2 === 0 ? "rounded-br-none" : "rounded-bl-none"}`} />
+                                <div className={`h-11 ${i % 3 === 0 ? "w-44" : i % 2 === 0 ? "w-60" : "w-36"} rounded-2xl bg-muted/40 animate-pulse ${i % 2 === 0 ? "rounded-br-none" : "rounded-bl-none"}`} />
                             </div>
                         ))}
                     </div>
@@ -431,10 +468,12 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
 
                             if (decryptedContent === null) return null
 
+                            const shouldAnimate = isInitialScrollDone.current && (msg.is_pending || msg.id < 0)
+
                             return (
                                 <div
                                     key={msg.id}
-                                    className={`flex ${isMine ? "justify-end" : "justify-start"} animate-in slide-in-from-bottom-2 duration-300`}
+                                    className={`flex ${isMine ? "justify-end" : "justify-start"} ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
                                 >
                                     <div className={`group relative px-4 py-2.5 text-sm max-w-[85%] sm:max-w-md break-words shadow-sm
                                         ${isMine

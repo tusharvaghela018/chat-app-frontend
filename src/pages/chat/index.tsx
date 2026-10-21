@@ -110,6 +110,7 @@ const ChatPage = () => {
                 {selectedUser && (
                     <div className="flex-1 flex flex-col h-full overflow-hidden">
                         <DirectChat
+                            key={`direct-${selectedUser.id}`}
                             user={selectedUser}
                             onBack={handleBack}
                             onClose={() => setSelectedUser(null)}
@@ -120,6 +121,7 @@ const ChatPage = () => {
                 {selectedGroup && (
                     <div className="flex-1 flex flex-col h-full overflow-hidden">
                         <GroupChat
+                            key={`group-${selectedGroup.id}`}
                             group={selectedGroup}
                             onGroupLeft={handleGroupLeft}
                             onOpenDM={handleOpenDM}
