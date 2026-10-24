@@ -5,6 +5,20 @@ import { GROUP_EVENTS } from "@/pages/chat/constants"
 import type { EncryptedMessage } from "@/utils/crypto"
 
 
+export interface IMessageReaction {
+    id: number
+    message_id: number
+    user_id: number
+    emoji: string
+}
+
+export interface IGroupMessageReaction {
+    id: number
+    group_message_id: number
+    user_id: number
+    emoji: string
+}
+
 export interface IMessage {
     id: number
     content: string
@@ -14,6 +28,7 @@ export interface IMessage {
     created_at: string
     is_seen?: boolean
     is_pending?: boolean
+    reactions?: IMessageReaction[]
 }
 
 interface UseChatProps {
@@ -33,6 +48,7 @@ interface UseChatReturn {
     emitMarkSeen: (conversationId: number, senderId: number) => void
     emitTypingStart: (receiverId: number) => void
     emitTypingStop: (receiverId: number) => void
+    emitToggleReaction: (messageId: number, emoji: string, receiverId: number) => void
 }
 
 export const useChat = ({
@@ -128,16 +144,25 @@ export const useChat = ({
             onStatusUpdated?.(data)
         }
 
+        // ── reactions ─────────────────────────────────────────────────────
+        const onReactionUpdated = ({ messageId, reactions }: { messageId: number; reactions: IMessageReaction[] }) => {
+            setMessages((prev) =>
+                prev.map((m) => (m.id === messageId ? { ...m, reactions } : m))
+            )
+        }
+
         socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, onReceiveMessage)
         socket.on(CHAT_EVENTS.MESSAGES_SEEN, onMessagesSeen)
         socket.on(CHAT_EVENTS.TYPING, onTyping)
         socket.on(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onConversationStatusUpdated)
+        socket.on(CHAT_EVENTS.REACTION_UPDATED, onReactionUpdated)
 
         return () => {
             socket.off(CHAT_EVENTS.RECEIVE_MESSAGE, onReceiveMessage)
             socket.off(CHAT_EVENTS.MESSAGES_SEEN, onMessagesSeen)
             socket.off(CHAT_EVENTS.TYPING, onTyping)
             socket.off(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onConversationStatusUpdated)
+            socket.off(CHAT_EVENTS.REACTION_UPDATED, onReactionUpdated)
         }
     }, [socket, currentUserId, onStatusUpdated])
 
@@ -162,6 +187,10 @@ export const useChat = ({
         socket?.emit(CHAT_EVENTS.TYPING_STOP, { receiverId })
     }
 
+    const emitToggleReaction = (messageId: number, emoji: string, receiverId: number) => {
+        socket?.emit(CHAT_EVENTS.TOGGLE_REACTION, { messageId, emoji, receiverId })
+    }
+
     return {
         messages,
         setMessages,
@@ -171,6 +200,7 @@ export const useChat = ({
         emitMarkSeen,
         emitTypingStart,
         emitTypingStop,
+        emitToggleReaction,
     }
 }
 
@@ -188,6 +218,7 @@ export interface IGroupMessage {
         name: string
         avatar: string | null
     }
+    reactions?: IGroupMessageReaction[]
 }
 
 interface TypingUser {
@@ -271,16 +302,34 @@ export const useGroupChat = ({ socket, groupId, initialMessages, onMemberJoined,
             onMemberLeft?.()
         }
 
+        // ── reactions ─────────────────────────────────────────────────────
+        const handleReactionUpdated = ({
+            groupMessageId,
+            groupId: gid,
+            reactions,
+        }: {
+            groupMessageId: number
+            groupId: number
+            reactions: IGroupMessageReaction[]
+        }) => {
+            if (gid !== groupId) return
+            setMessages((prev) =>
+                prev.map((m) => (m.id === groupMessageId ? { ...m, reactions } : m))
+            )
+        }
+
         socket.on(GROUP_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
         socket.on(GROUP_EVENTS.TYPING, handleTyping)
         socket.on(GROUP_EVENTS.MEMBER_JOINED, handleMemberJoined)
         socket.on(GROUP_EVENTS.MEMBER_LEFT, handleMemberLeft)
+        socket.on(GROUP_EVENTS.REACTION_UPDATED, handleReactionUpdated)
 
         return () => {
             socket.off(GROUP_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
             socket.off(GROUP_EVENTS.TYPING, handleTyping)
             socket.off(GROUP_EVENTS.MEMBER_JOINED, handleMemberJoined)
             socket.off(GROUP_EVENTS.MEMBER_LEFT, handleMemberLeft)
+            socket.off(GROUP_EVENTS.REACTION_UPDATED, handleReactionUpdated)
         }
     }, [socket, groupId])
 
@@ -316,6 +365,11 @@ export const useGroupChat = ({ socket, groupId, initialMessages, onMemberJoined,
         socket.emit(GROUP_EVENTS.TYPING_STOP, { groupId })
     }
 
+    const emitToggleReaction = (groupMessageId: number, emoji: string) => {
+        if (!socket) return
+        socket.emit(GROUP_EVENTS.TOGGLE_REACTION, { groupMessageId, groupId, emoji })
+    }
+
     return {
         messages,
         setMessages,
@@ -324,5 +378,6 @@ export const useGroupChat = ({ socket, groupId, initialMessages, onMemberJoined,
         markSeen,
         emitTypingStart,
         emitTypingStop,
+        emitToggleReaction,
     }
 }

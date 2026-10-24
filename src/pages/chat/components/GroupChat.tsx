@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react"
-import { Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, Copy, Send, ChevronLeft, X, Lock, Loader2 } from "lucide-react"
+import { 
+    Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, 
+    Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, 
+    Copy, Send, ChevronLeft, X, Lock, Loader2, Video, Phone, Search, 
+    Smile, Mic, Plus 
+} from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
 import { useGetApi, useDeleteApi, usePatchApi, usePostApi } from "@/hooks/api"
@@ -13,7 +18,7 @@ import AddMemberModal from "@/pages/chat/components/group/AddMemberModal"
 import GroupSettingsModal from "@/pages/chat/components/group/GroupSettingsModal"
 import EditGroupModal from "@/pages/chat/components/group/EditGroupModal"
 import JoinRequestsModal from "@/pages/chat/components/group/JoinRequestsModal"
-import { useGroupChat, type IGroupMessage } from "@/pages/chat/hooks"
+import { useGroupChat, type IGroupMessage, type IGroupMessageReaction } from "@/pages/chat/hooks"
 import { useSocket } from "@/hooks/socket"
 import { 
     encryptGroupPayload, 
@@ -24,8 +29,6 @@ import {
     getSessionKeys, 
     type EncryptedMessage 
 } from "@/utils/crypto"
-
-import Input from "@/common/Input"
 
 interface Props {
     group: IGroup
@@ -125,6 +128,10 @@ const MemberMenu = ({
     )
 }
 
+import EmojiPicker, { Theme, type EmojiClickData } from "emoji-picker-react"
+
+const COMMON_EMOJIS = ["❤️", "👍", "🔥", "😂", "🤩", "🎉"]
+
 const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => {
     const authUser = useSelector(getUser);
     const socket = useSocket();
@@ -141,6 +148,56 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const isInitialScrollDone = useRef(false)
     const lastMessageIdRef = useRef<number | null>(null)
     const decryptCache = useRef<Map<string, string | null>>(new Map())
+
+    const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null)
+    const [moreEmojiMsgId, setMoreEmojiMsgId] = useState<number | null>(null)
+    const [showInputEmojiPicker, setShowInputEmojiPicker] = useState(false)
+
+    useEffect(() => {
+        const handleDocumentClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement
+            if (!target.closest('.emoji-picker-container') && !target.closest('.epr-main')) {
+                setMoreEmojiMsgId(null)
+            }
+            if (!target.closest('.input-emoji-picker-container') && !target.closest('.input-emoji-btn') && !target.closest('.epr-main')) {
+                setShowInputEmojiPicker(false)
+            }
+        }
+        document.addEventListener("mousedown", handleDocumentClick)
+        return () => document.removeEventListener("mousedown", handleDocumentClick)
+    }, [])
+
+    const [copiedId, setCopiedId] = useState<number | null>(null)
+
+    const handleCopyText = (id: number, text: string) => {
+        navigator.clipboard.writeText(text)
+        setCopiedId(id)
+        setTimeout(() => setCopiedId(null), 1500)
+    }
+
+    interface AggregatedReaction {
+        emoji: string
+        count: number
+        hasReacted: boolean
+    }
+
+    const getAggregatedReactions = (msgReactions: IGroupMessageReaction[] | undefined, currentUserId: number): AggregatedReaction[] => {
+        if (!msgReactions || msgReactions.length === 0) return []
+        const map = new Map<string, { count: number; hasReacted: boolean }>()
+        for (const r of msgReactions) {
+            const item = map.get(r.emoji) || { count: 0, hasReacted: false }
+            item.count += 1
+            if (r.user_id === currentUserId) {
+                item.hasReacted = true
+            }
+            map.set(r.emoji, item)
+        }
+        return Array.from(map.entries()).map(([emoji, data]) => ({
+            emoji,
+            count: data.count,
+            hasReacted: data.hasReacted,
+        }))
+    }
 
     const queryClient = useQueryClient()
 
@@ -173,6 +230,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         markSeen,
         emitTypingStart,
         emitTypingStop,
+        emitToggleReaction,
     } = useGroupChat({
         socket,
         groupId: group.id,
@@ -186,6 +244,38 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
         },
     })
+
+    const handleToggleReaction = (groupMessageId: number, emoji: string) => {
+        if (!authUser?.id) return
+
+        // Instant optimistic update
+        setMessages((prev) =>
+            prev.map((m) => {
+                if (m.id !== groupMessageId) return m
+                const current = m.reactions || []
+                const existingIdx = current.findIndex(
+                    (r) => r.emoji === emoji && r.user_id === authUser.id
+                )
+                let nextReactions: IGroupMessageReaction[]
+                if (existingIdx >= 0) {
+                    nextReactions = current.filter((_, idx) => idx !== existingIdx)
+                } else {
+                    nextReactions = [
+                        ...current,
+                        {
+                            id: -Date.now(),
+                            group_message_id: groupMessageId,
+                            user_id: authUser.id,
+                            emoji,
+                        },
+                    ]
+                }
+                return { ...m, reactions: nextReactions }
+            })
+        )
+
+        emitToggleReaction(groupMessageId, emoji)
+    }
 
     const { data: liveData } = useGetApi<{ group: IGroup }>(
         `/groups/${group.id}`,
@@ -523,60 +613,84 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     }, [group.id])
 
     return (
-        <div className="flex-1 flex flex-col overflow-hidden bg-background">
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/70 dark:bg-[#0b1120]">
 
-            {/* header */}
-            <div className="h-16 flex-shrink-0 flex items-center justify-between border-b bg-card px-4 shadow-sm sm:px-6">
+            {/* header matching mockup */}
+            <div className="h-16 flex-shrink-0 flex items-center justify-between border-b border-slate-200/90 dark:border-slate-800/80 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md px-4 sm:px-6 shadow-xs z-10">
                 <div className="flex items-center gap-3">
                     {onBack && (
                         <Button 
                             variant="ghost" 
                             size="icon" 
                             onClick={onBack} 
-                            className="mr-1 rounded-full"
+                            className="mr-1 lg:hidden rounded-full text-slate-600 dark:text-slate-300"
                         >
-                            <ChevronLeft size={24} />
+                            <ChevronLeft size={22} />
                         </Button>
                     )}
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold shadow-inner overflow-hidden">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold shadow-xs overflow-hidden">
                         {group.avatar
-                            ? <img src={group.avatar} className="h-full w-full rounded-xl object-cover" />
-                            : <Users size={20} />
+                            ? <img src={group.avatar} className="h-full w-full object-cover" />
+                            : <Users size={18} />
                         }
                     </div>
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                            <p className="truncate text-sm font-bold text-foreground">{liveGroup.name}</p>
-                            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-green-500/10 text-[9px] font-bold text-green-600 border border-green-500/20 uppercase tracking-tighter">
-                                <Lock size={8} strokeWidth={3} /> Encrypted
+                            <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{liveGroup.name}</p>
+                            <div className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-tight">
+                                <Lock size={8} strokeWidth={3} /> E2EE
                             </div>
                         </div>
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                             {memberCount} member{memberCount !== 1 ? "s" : ""}
                         </p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-1">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setShowInfo((prev) => !prev)}
-                        className={`rounded-full transition-all duration-200
-                            ${showInfo ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                    <button
+                        type="button"
+                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Start group video call"
                     >
-                        <Info size={20} />
-                    </Button>
+                        <Video size={18} />
+                    </button>
+                    <button
+                        type="button"
+                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Start group voice call"
+                    >
+                        <Phone size={18} />
+                    </button>
+                    <button
+                        type="button"
+                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Search in group"
+                    >
+                        <Search size={18} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowInfo((prev) => !prev)}
+                        className={`p-2 rounded-full transition-colors ${
+                            showInfo 
+                                ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300" 
+                                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                        title="Group info"
+                    >
+                        <Info size={18} />
+                    </button>
                     {onClose && (
-                         <div className="border-l ml-1 pl-1">
-                             <Button 
-                                variant="ghost" 
-                                size="icon" 
+                        <div className="border-l border-slate-200 dark:border-slate-800 ml-1 pl-1">
+                            <button
+                                type="button"
                                 onClick={onClose} 
-                                className="text-muted-foreground hover:text-destructive transition-colors rounded-full"
+                                className="p-2 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                title="Close chat"
                             >
-                                <X size={20} />
-                            </Button>
+                                <X size={18} />
+                            </button>
                         </div>
                     )}
                 </div>
@@ -585,28 +699,41 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             {/* messages area */}
             <div 
                 ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-background/50"
+                className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4 custom-scrollbar"
             >
                 <div ref={topRef} className="h-1" />
+                
                 {isLoadingMore && (
                     <div className="flex justify-center py-2">
-                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
                     </div>
                 )}
+
+                {/* E2EE padlock banner at top of messages */}
+                <div className="flex flex-col items-center justify-center p-3.5 sm:p-4 my-2 mb-4 rounded-2xl bg-white/90 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-center max-w-sm mx-auto shadow-xs">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                        <Lock size={13} className="text-purple-600 dark:text-purple-400" />
+                        <span>End-to-end encrypted</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Messages and calls in this group are protected with end-to-end encryption.
+                    </p>
+                </div>
+
                 {(isFetching && messages.length === 0) ? (
                     <div className="flex-1 space-y-3 p-2 animate-in fade-in duration-300">
                         {[1, 2, 3, 4, 5, 6].map((i) => (
                             <div key={i} className={`flex ${i % 3 === 0 ? "justify-end" : "justify-start"}`}>
-                                <div className={`h-11 ${i % 3 === 0 ? "w-44" : i % 2 === 0 ? "w-60" : "w-36"} rounded-2xl bg-muted/40 animate-pulse ${i % 3 === 0 ? "rounded-br-none" : "rounded-bl-none"}`} />
+                                <div className={`h-11 ${i % 3 === 0 ? "w-44" : i % 2 === 0 ? "w-60" : "w-36"} rounded-2xl bg-slate-200/60 dark:bg-slate-800/60 animate-pulse ${i % 3 === 0 ? "rounded-br-xs" : "rounded-bl-xs"}`} />
                             </div>
                         ))}
                     </div>
                 ) : (isSuccess && messages.length === 0) ? (
-                    <div className="flex h-full flex-col items-center justify-center space-y-4 animate-in fade-in duration-500">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <div className="flex h-64 flex-col items-center justify-center space-y-4 animate-in fade-in duration-500">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-100 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 shadow-inner">
                             <MessageSquare size={32} />
                         </div>
-                        <p className="text-sm font-medium text-muted-foreground">No messages yet — say hello 👋</p>
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No messages yet — say hello 👋</p>
                     </div>
                 ) : (
                     <>
@@ -617,7 +744,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                             if (isSystem) {
                                 return (
                                     <div key={msg.id} className="flex justify-center my-2 animate-in fade-in duration-300">
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-muted px-4 py-1 rounded-full border border-border">
+                                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-slate-800/80 px-4 py-1 rounded-full border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
                                             {msg.content}
                                         </span>
                                     </div>
@@ -628,14 +755,24 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                             if (decryptedContent === null) return null
 
                             const shouldAnimate = isInitialScrollDone.current && (msg.is_pending || msg.id < 0)
+                            const msgAggReactions = getAggregatedReactions(msg.reactions, authUser?.id || 0)
+                            const isHovered = hoveredMsgId === msg.id || moreEmojiMsgId === msg.id
 
                             return (
                                 <div
                                     key={msg.id}
-                                    className={`flex ${isMine ? "justify-end" : "justify-start"} gap-2 ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
+                                    onMouseEnter={() => setHoveredMsgId(msg.id)}
+                                    onMouseLeave={() => {
+                                        if (moreEmojiMsgId !== msg.id) {
+                                            setHoveredMsgId(null)
+                                        }
+                                    }}
+                                    className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 ${
+                                        msgAggReactions.length > 0 ? "mb-3.5" : ""
+                                    } ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
                                 >
                                     {!isMine && (
-                                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-[10px] mt-1 shadow-inner overflow-hidden">
+                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-xs shadow-xs overflow-hidden self-end mb-1">
                                             {msg.sender?.avatar
                                                 ? <img src={msg.sender.avatar} className="h-full w-full object-cover" />
                                                 : msg.sender?.name?.[0]?.toUpperCase()
@@ -643,24 +780,133 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                         </div>
                                     )}
 
-                                    <div className="max-w-[80%] sm:max-w-md">
+                                    <div className={`group relative max-w-[85%] sm:max-w-md flex flex-col ${isMine ? "items-end" : "items-start"}`}>
+                                        
+                                        {/* floating hover action toolbar */}
+                                        <div className={`absolute -top-4 ${
+                                            isMine ? "right-2" : "left-2"
+                                        } z-30 transition-all duration-150 emoji-picker-container ${
+                                            isHovered
+                                                ? "opacity-100 pointer-events-auto scale-100"
+                                                : "opacity-0 pointer-events-none scale-95"
+                                        }`}>
+                                            <div className="flex items-center gap-0.5 bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-md border border-slate-200 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-md">
+                                                {COMMON_EMOJIS.map(emoji => (
+                                                    <button
+                                                        key={emoji}
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            handleToggleReaction(msg.id, emoji)
+                                                        }}
+                                                        className="hover:scale-125 active:scale-95 transition-transform text-xs p-1"
+                                                        title={`React with ${emoji}`}
+                                                    >
+                                                        {emoji}
+                                                    </button>
+                                                ))}
+
+                                                {/* +Emoji icon button */}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setMoreEmojiMsgId(moreEmojiMsgId === msg.id ? null : msg.id)
+                                                    }}
+                                                    className={`p-1 rounded-full transition-colors flex items-center justify-center ${
+                                                        moreEmojiMsgId === msg.id
+                                                            ? "text-purple-600 bg-purple-100 dark:bg-purple-900/40"
+                                                            : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"
+                                                    }`}
+                                                    title="Add custom reaction"
+                                                >
+                                                    <Smile size={13} />
+                                                    <span className="text-[10px] font-bold leading-none -ml-0.5">+</span>
+                                                </button>
+
+                                                <div className="h-3 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        handleCopyText(msg.id, decryptedContent)
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors"
+                                                    title="Copy text"
+                                                >
+                                                    {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                                                </button>
+                                            </div>
+
+                                            {/* Full Emoji Picker Popover */}
+                                            {moreEmojiMsgId === msg.id && (
+                                                <div className={`absolute top-full mt-2 ${
+                                                    isMine ? "right-0" : "left-0"
+                                                } z-50 shadow-2xl rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-150`}>
+                                                    <EmojiPicker
+                                                        theme={document.documentElement.classList.contains("dark") ? Theme.DARK : Theme.LIGHT}
+                                                        onEmojiClick={(emojiData: EmojiClickData) => {
+                                                            handleToggleReaction(msg.id, emojiData.emoji)
+                                                            setMoreEmojiMsgId(null)
+                                                        }}
+                                                        lazyLoadEmojis={true}
+                                                        searchPlaceHolder="React with emoji..."
+                                                        width={300}
+                                                        height={380}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+
                                         {!isMine && (
-                                            <p className="text-[10px] font-bold text-muted-foreground mb-1 ml-1 truncate">
+                                            <p className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 mb-1 ml-1 truncate">
                                                 {msg.sender?.name}
                                             </p>
                                         )}
-                                        <div className={`relative px-4 py-2.5 rounded-2xl text-sm break-words shadow-sm
-                                            ${isMine
-                                                ? "bg-primary text-primary-foreground rounded-br-none"
-                                                : "bg-card text-foreground rounded-bl-none border border-border"
-                                            }`}
-                                        >
-                                            {decryptedContent}
-                                            <div className={`text-[10px] tabular-nums mt-1 text-right 
-                                                ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                                            >
-                                                {new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+
+                                        {/* bubble & docked attached reaction badge */}
+                                        <div className="relative inline-block">
+                                            <div className={`relative px-4 py-2.5 text-sm break-words shadow-xs ${
+                                                isMine
+                                                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
+                                                    : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
+                                            }`}>
+                                                <p className="whitespace-pre-wrap leading-relaxed">{decryptedContent}</p>
+                                                <div className={`text-[10px] tabular-nums mt-1 text-right ${
+                                                    isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
+                                                }`}>
+                                                    {new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </div>
                                             </div>
+
+                                            {/* Attached reaction pill docked to bottom edge of bubble */}
+                                            {msgAggReactions.length > 0 && (
+                                                <div className={`absolute -bottom-2.5 z-10 flex items-center gap-1 ${
+                                                    isMine ? "right-2" : "left-2"
+                                                }`}>
+                                                    <div className="flex items-center gap-1 bg-white/95 dark:bg-[#1e293b]/95 border border-slate-200/90 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-xs backdrop-blur-md">
+                                                        {msgAggReactions.map(r => (
+                                                            <button 
+                                                                key={r.emoji}
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    handleToggleReaction(msg.id, r.emoji)
+                                                                }}
+                                                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs transition-all hover:scale-110 active:scale-95 ${
+                                                                    r.hasReacted
+                                                                        ? "bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 font-bold"
+                                                                        : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                                                }`}
+                                                                title={r.hasReacted ? `You reacted with ${r.emoji} (click to remove)` : `Reacted with ${r.emoji}`}
+                                                            >
+                                                                <span className="text-xs leading-none">{r.emoji}</span>
+                                                                <span className="text-[10px] font-bold leading-none">{r.count}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -669,16 +915,21 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                     </>
                 )}
 
-                {/* typing indicator */}
+                {/* typing indicator matching mockup */}
                 {typingUsers.length > 0 && (
-                    <div className="flex justify-start gap-2 animate-in slide-in-from-left-2">
-                        <div className="px-4 py-2 bg-muted rounded-2xl rounded-bl-none border border-border">
-                            <p className="text-xs font-medium text-primary animate-pulse italic">
+                    <div className="flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                        <div className="px-3.5 py-2 rounded-2xl rounded-bl-xs bg-white dark:bg-[#162032] border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 dark:bg-purple-400 animate-bounce [animation-delay:-0.3s]"></span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 dark:bg-purple-400 animate-bounce [animation-delay:-0.15s]"></span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 dark:bg-purple-400 animate-bounce"></span>
+                            </div>
+                            <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">
                                 {typingUsers.length === 1
                                     ? `${typingUsers[0].senderName} is typing...`
                                     : `${typingUsers.length} people are typing...`
                                 }
-                            </p>
+                            </span>
                         </div>
                     </div>
                 )}
@@ -686,36 +937,89 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                 <div ref={bottomRef} />
             </div>
 
-            {/* input */}
-            <div className="border-t bg-card p-4 pb-safe sm:px-6">
+            {/* input matching mockup */}
+            <div className="border-t border-slate-200/90 dark:border-slate-800/80 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md p-3 sm:p-4 pb-safe">
                 {liveGroup.settings?.who_can_send === "admins" && !isAdmin ? (
-                    <div className="flex items-center justify-center p-2 bg-muted rounded-xl border border-dashed">
-                        <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                            <Shield size={14} /> Only admins can send messages
+                    <div className="flex items-center justify-center p-3 bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                            <Shield size={14} className="text-purple-600" /> Only admins can send messages
                         </p>
                     </div>
                 ) : (
-                    <div className="flex items-center gap-2 max-w-4xl mx-auto">
-                        <Input
-                            value={input}
-                            onChange={(e) => handleTyping(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault()
-                                    handleSend()
-                                }
+                    <div className="relative flex items-center gap-2 max-w-4xl mx-auto">
+                        {/* Input Emoji Picker Popover */}
+                        {showInputEmojiPicker && (
+                            <div className="absolute bottom-full mb-3 right-0 sm:right-14 z-50 shadow-2xl rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 input-emoji-picker-container animate-in fade-in zoom-in-95 duration-150">
+                                <EmojiPicker
+                                    theme={document.documentElement.classList.contains("dark") ? Theme.DARK : Theme.LIGHT}
+                                    onEmojiClick={(emojiData: EmojiClickData) => {
+                                        handleTyping(input + emojiData.emoji)
+                                    }}
+                                    lazyLoadEmojis={true}
+                                    searchPlaceHolder="Search emoji..."
+                                    width={320}
+                                    height={400}
+                                />
+                            </div>
+                        )}
+
+                        <button
+                            type="button"
+                            className="h-11 w-11 shrink-0 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors"
+                            title="Add attachment"
+                        >
+                            <Plus size={20} />
+                        </button>
+
+                        <div className="flex-1 flex items-center bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/60 rounded-full px-4 h-11 focus-within:ring-2 focus-within:ring-purple-500/50 focus-within:border-purple-500 transition-all">
+                            <input
+                                value={input}
+                                onChange={(e) => handleTyping(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                        e.preventDefault()
+                                        setShowInputEmojiPicker(false)
+                                        handleSend()
+                                    }
+                                }}
+                                placeholder={`Message ${liveGroup.name}...`}
+                                className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
+                            />
+                            
+                            <button
+                                type="button"
+                                onClick={() => setShowInputEmojiPicker(prev => !prev)}
+                                className={`p-1.5 input-emoji-btn transition-colors ${
+                                    showInputEmojiPicker 
+                                        ? "text-purple-600 dark:text-purple-400" 
+                                        : "text-slate-400 hover:text-purple-600 dark:hover:text-purple-400"
+                                }`}
+                                title="Add emoji"
+                            >
+                                <Smile size={20} />
+                            </button>
+
+                            <button
+                                type="button"
+                                className="p-1.5 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                title="Voice message"
+                            >
+                                <Mic size={20} />
+                            </button>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setShowInputEmojiPicker(false)
+                                handleSend()
                             }}
-                            placeholder={`Message ${liveGroup.name}...`}
-                            containerClassName="flex-1"
-                            inputClassName="rounded-2xl h-11"
-                        />
-                        <Button
-                            onClick={handleSend}
                             disabled={!input.trim()}
-                            className="h-11 w-11 shrink-0 rounded-2xl shadow-lg shadow-primary/20"
+                            className="h-11 w-11 shrink-0 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white flex items-center justify-center shadow-lg shadow-purple-600/30 transition-transform active:scale-95 cursor-pointer disabled:cursor-not-allowed"
+                            title="Send message"
                         >
                             <Send size={18} />
-                        </Button>
+                        </button>
                     </div>
                 )}
             </div>

@@ -4,6 +4,7 @@ export interface IUser {
     username: string
     avatar?: string
     is_online?: boolean
+    last_seen?: string
     email?: string
     public_key?: string
     encrypted_vault?: string
