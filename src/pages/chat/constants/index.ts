@@ -41,5 +41,28 @@ export const GROUP_EVENTS = {
     ERROR: "group_error",
 } as const
 
+export const CALL_EVENTS = {
+    // Calling initiation & response
+    INITIATE: "call:initiate",
+    INCOMING: "call:incoming",
+    ACCEPT: "call:accept",
+    ACCEPTED: "call:accepted",
+    REJECT: "call:reject",
+    REJECTED: "call:rejected",
+    END: "call:end",
+    ENDED: "call:ended",
+    UNAVAILABLE: "call:unavailable",
+
+    // WebRTC Signaling
+    OFFER: "call:offer",
+    ANSWER: "call:answer",
+    ICE_CANDIDATE: "call:ice-candidate",
+
+    // In-call state changes
+    TOGGLE_MEDIA: "call:toggle-media",
+    MEDIA_TOGGLED: "call:media-toggled"
+} as const
+
 export type ChatEvent = typeof CHAT_EVENTS[keyof typeof CHAT_EVENTS]
 export type GroupEvent = typeof GROUP_EVENTS[keyof typeof GROUP_EVENTS]
+export type CallEvent = typeof CALL_EVENTS[keyof typeof CALL_EVENTS]

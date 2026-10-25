@@ -27,9 +27,11 @@ import DocumentCard from "@/pages/chat/components/media/DocumentCard"
 import AudioPlayerBubble from "@/pages/chat/components/media/AudioPlayerBubble"
 import AudioRecorderBar from "@/pages/chat/components/media/AudioRecorderBar"
 import ImageBubble from "@/pages/chat/components/media/ImageBubble"
+import CallLogBubble from "@/pages/chat/components/media/CallLogBubble"
 import RichTextRenderer from "@/pages/chat/components/RichTextRenderer"
 import RichMessageInput from "@/pages/chat/components/input/RichMessageInput"
 import UserProfileModal from "./UserProfileModal"
+import { useCall } from "@/context/CallContext"
 
 interface Props {
     user: IUser
@@ -45,6 +47,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const myKeys = getSessionKeys()
     const queryClient = useQueryClient()
     const { isUserOnline, getUserLastSeen, formatLastActive } = usePresence()
+    const { startCall, callStatus } = useCall()
 
     const isOnline = isUserOnline(user.id, user.is_online, user.last_seen_privacy)
     const lastSeen = getUserLastSeen(user.id, user.last_seen, user.last_seen_privacy)
@@ -142,7 +145,22 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const isIRecipient = conversation?.receiver_id === authUser?.id
 
     const iBlocked = isIRequester ? conversation?.blocked_by_sender : conversation?.blocked_by_receiver
+    const otherBlockedMe = isIRequester ? conversation?.blocked_by_receiver : conversation?.blocked_by_sender
     const isArchived = isIRequester ? (conversation as any)?.archived_by_sender : (conversation as any)?.archived_by_receiver
+
+    const handleStartCall = (isVideo: boolean) => {
+        if (!user) return
+        startCall(
+            {
+                id: user.id,
+                name: user.name,
+                avatar: user.avatar,
+                username: user.username,
+            },
+            isVideo,
+            conversation?.id
+        )
+    }
 
     // If I am the requester and status is rejected, it means THEY rejected ME
     const iAmRejected = isIRequester && isRejected
@@ -364,7 +382,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             try {
                 if (content.startsWith('{"type":')) {
                     const parsed = JSON.parse(content)
-                    textToSearch = parsed.name || parsed.caption || content
+                    if (parsed.type === "call_log") {
+                        textToSearch = `${parsed.callType} call ${parsed.status}`
+                    } else {
+                        textToSearch = parsed.name || parsed.caption || content
+                    }
                 }
             } catch {}
             if (textToSearch.toLowerCase().includes(q)) {
@@ -759,8 +781,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                     {/* 1. Audio/Voice call (directly visible) */}
                     <button
                         type="button"
-                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Start voice call"
+                        onClick={() => handleStartCall(false)}
+                        disabled={callStatus !== "idle" || !!iBlocked || !!otherBlockedMe}
+                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={iBlocked || otherBlockedMe ? "Call unavailable" : "Start voice call"}
                         aria-label="Start voice call"
                     >
                         <Phone size={18} />
@@ -769,8 +793,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                     {/* 2. Video call (directly visible) */}
                     <button
                         type="button"
-                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Start video call"
+                        onClick={() => handleStartCall(true)}
+                        disabled={callStatus !== "idle" || !!iBlocked || !!otherBlockedMe}
+                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={iBlocked || otherBlockedMe ? "Call unavailable" : "Start video call"}
                         aria-label="Start video call"
                     >
                         <Video size={18} />
@@ -1031,21 +1057,51 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
 
                             // Check if decrypted content is a rich media payload
                             let richPayload: {
-                                type: "file" | "audio" | "image"
-                                url: string
+                                type: "file" | "audio" | "image" | "call_log"
+                                url?: string
                                 name?: string
                                 size?: number
                                 duration?: number
+                                callId?: number
+                                callType?: "audio" | "video"
+                                status?: "completed" | "missed" | "declined" | "busy" | "cancelled"
+                                startedAt?: string | Date
                             } | null = null
                             try {
                                 if (
                                     decryptedContent.startsWith('{"type":"file"') ||
                                     decryptedContent.startsWith('{"type":"audio"') ||
-                                    decryptedContent.startsWith('{"type":"image"')
+                                    decryptedContent.startsWith('{"type":"image"') ||
+                                    decryptedContent.startsWith('{"type":"call_log"')
                                 ) {
                                     richPayload = JSON.parse(decryptedContent)
                                 }
                             } catch {}
+
+                            if (richPayload?.type === "call_log") {
+                                const isCurrentSearchMatch = isSearchOpen && matchingMessageIds.length > 0 && matchingMessageIds[currentMatchIndex] === msg.id
+                                const isSearchMatch = isSearchOpen && matchingMessageIds.includes(msg.id)
+                                return (
+                                    <div
+                                        key={msg.id}
+                                        id={`direct-msg-${msg.id}`}
+                                        className={`transition-all rounded-2xl ${
+                                            isCurrentSearchMatch
+                                                ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] p-1"
+                                                : isSearchMatch
+                                                    ? "bg-purple-500/5 ring-1 ring-purple-400/40 p-1"
+                                                    : ""
+                                        }`}
+                                    >
+                                        <CallLogBubble
+                                            payload={richPayload as any}
+                                            isMine={isMine}
+                                            createdAt={msg.created_at}
+                                            onCallBack={handleStartCall}
+                                        />
+                                    </div>
+                                )
+                            }
 
                             const isImage = richPayload?.type === "image" || (
                                 richPayload?.type === "file" &&
@@ -1194,7 +1250,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                 <div className="relative inline-block">
                                                     {isImage ? (
                                                         <ImageBubble
-                                                            url={richPayload!.url}
+                                                            url={richPayload!.url!}
                                                             name={richPayload?.name || "Photo"}
                                                             size={richPayload?.size}
                                                             isMine={isMine}
@@ -1205,7 +1261,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                         />
                                                     ) : isAudio ? (
                                                         <AudioPlayerBubble
-                                                            url={richPayload!.url}
+                                                            url={richPayload!.url!}
                                                             duration={richPayload?.duration}
                                                             isMine={isMine}
                                                             createdAt={msg.created_at}
@@ -1215,7 +1271,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                         />
                                                     ) : isDoc ? (
                                                         <DocumentCard
-                                                            url={richPayload!.url}
+                                                            url={richPayload!.url!}
                                                             name={richPayload?.name || "Attachment"}
                                                             size={richPayload?.size}
                                                             isMine={isMine}

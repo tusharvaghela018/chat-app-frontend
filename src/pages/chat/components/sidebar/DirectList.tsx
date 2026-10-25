@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Search, MessageSquare, ShieldAlert, Ban, Archive, ArchiveRestore } from "lucide-react"
+import { Search, MessageSquare, ShieldAlert, Ban, Archive, ArchiveRestore, Phone, PhoneMissed, Video } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useGetApi } from "@/hooks/api"
 import axiosInstance from "@/api/axios"
@@ -254,7 +254,32 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
                                                     <ShieldAlert size={11} /> Message Request
                                                 </span>
                                             ) : lastMsg ? (
-                                                lastMsg.content.startsWith('{') ? '🔒 Encrypted message' : lastMsg.content
+                                                (() => {
+                                                    const content = lastMsg.content || ""
+                                                    if (content.includes('"type":"call_log"')) {
+                                                        try {
+                                                            const parsed = JSON.parse(content)
+                                                            const isVideo = parsed.callType === "video"
+                                                            const isMissed = parsed.status === "missed" || parsed.status === "cancelled" || parsed.status === "declined"
+                                                            return (
+                                                                <span className={`inline-flex items-center gap-1 font-medium ${isMissed ? "text-rose-500 dark:text-rose-400" : "text-purple-600 dark:text-purple-400"}`}>
+                                                                    {isMissed ? <PhoneMissed size={11} className="stroke-[2.5]" /> : isVideo ? <Video size={11} /> : <Phone size={11} />}
+                                                                    {isMissed
+                                                                        ? isVideo ? "Missed video call" : "Missed voice call"
+                                                                        : isVideo ? "Video call" : "Voice call"
+                                                                    }
+                                                                </span>
+                                                            )
+                                                        } catch {}
+                                                    }
+                                                    if (content.includes('"type":"image"')) return "📷 Photo"
+                                                    if (content.includes('"type":"audio"')) return "🎵 Voice note"
+                                                    if (content.includes('"type":"file"')) return "📎 Attachment"
+                                                    if (content.startsWith('{"c":') || content.startsWith('{"n":')) {
+                                                        return "🔒 Encrypted message"
+                                                    }
+                                                    return content.startsWith('{') ? '🔒 Encrypted message' : content
+                                                })()
                                             ) : (
                                                 `@${otherUser.username}`
                                             )}

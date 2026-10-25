@@ -8,8 +8,7 @@ import {
     Phone,
     Star,
     Archive,
-    Search,
-    PhoneOff,
+    Search
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useSelector } from "react-redux"
@@ -20,6 +19,7 @@ import { CHAT_EVENTS, GROUP_EVENTS } from "@/pages/chat/constants"
 import DirectList from "@/pages/chat/components/sidebar/DirectList"
 import GroupList from "@/pages/chat/components/sidebar/GroupList"
 import StarredList from "@/pages/chat/components/sidebar/StarredList"
+import CallList from "@/pages/chat/components/sidebar/CallList"
 import type { IGroup, IUser } from "@/types"
 import { ROUTES } from "@/constants/routes"
 import { useTheme } from "@/common/ThemeProvider"
@@ -322,7 +322,13 @@ const Sidebar = ({
                         <input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder={navTab === "groups" ? "Search groups..." : "Search conversations..."}
+                            placeholder={
+                                navTab === "groups"
+                                    ? "Search groups..."
+                                    : navTab === "calls"
+                                    ? "Search call history..."
+                                    : "Search conversations..."
+                            }
                             className="w-full pl-10 pr-12 py-2 text-xs bg-slate-100 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 rounded-xl outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all duration-200 placeholder:text-slate-400 text-slate-900 dark:text-slate-100"
                         />
                         <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded-md pointer-events-none shadow-2xs">
@@ -359,17 +365,10 @@ const Sidebar = ({
                     )}
 
                     {navTab === "calls" && (
-                        <div className="flex flex-col items-center justify-center h-64 text-center px-6">
-                            <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center text-slate-400 mb-3">
-                                <PhoneOff size={22} />
-                            </div>
-                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                                No recent calls
-                            </p>
-                            <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
-                                Voice and video calling with end-to-end encryption will appear here.
-                            </p>
-                        </div>
+                        <CallList
+                            onSelectUser={onSelectUser}
+                            externalSearch={search}
+                        />
                     )}
 
                     {navTab === "starred" && (
