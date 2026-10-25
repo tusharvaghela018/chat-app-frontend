@@ -12,6 +12,11 @@ interface User {
     encrypted_vault?: string
     vault_salt?: string
     two_factor_enabled?: boolean
+    last_seen_privacy?: "everyone" | "contacts" | "nobody"
+    avatar_privacy?: "everyone" | "contacts" | "nobody"
+    read_receipts?: boolean
+    search_discoverable?: boolean
+    find_by_email_phone?: boolean
 }
 
 interface AuthSlice {

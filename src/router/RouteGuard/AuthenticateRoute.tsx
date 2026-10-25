@@ -8,6 +8,9 @@ import { useGetApi } from "@/hooks/api"
 import type { IUser } from "@/types"
 
 import Loader from "@/common/Loader"
+import { CallProvider } from "@/context/CallContext"
+import CallModal from "@/components/call/CallModal"
+import FloatingCallWidget from "@/components/call/FloatingCallWidget"
 
 interface MeResponse {
     user: IUser
@@ -55,7 +58,11 @@ const AuthenticateRoute: React.FC<PropsWithChildren> = ({ children }) => {
     }
 
     return (
-        <>{children}</>
+        <CallProvider>
+            {children}
+            <CallModal />
+            <FloatingCallWidget />
+        </CallProvider>
     )
 }
 

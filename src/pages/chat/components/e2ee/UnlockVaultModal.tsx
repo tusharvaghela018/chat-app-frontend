@@ -1,12 +1,10 @@
 import { useState, useEffect } from "react";
 import Modal from "@/common/Modal";
-import Button from "@/common/Button";
 import Input from "@/common/Input";
-import { AlertCircle, Trash2, Info } from "lucide-react";
+import { AlertCircle, Trash2, Info, Lock, Unlock, ShieldAlert, Loader2, KeyRound } from "lucide-react";
 import { decryptPrivateKey, type EncryptedVault } from "@/utils/vault";
 import { storeLocalPrivateKey } from "@/utils/indexeddb";
 import { setSessionKeys } from "@/utils/crypto";
-import { BsFillLockFill, BsFillUnlockFill } from "react-icons/bs";
 import { Link, useLocation } from "react-router-dom";
 import { ROUTES } from "@/constants/routes";
 
@@ -26,9 +24,8 @@ const UnlockVaultModal = ({ open, vault, salt, publicKey, onComplete, onReset }:
     const [error, setError] = useState("");
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [showResetConfirm, setShowResetConfirm] = useState(false);
-    const [resetLoading] = useState(false);
 
-    // Reset state whenever modal opens or location changes (e.g. going back from privacy policy)
+    // Reset state whenever modal opens or location changes
     useEffect(() => {
         if (open) {
             setPin("");
@@ -77,79 +74,136 @@ const UnlockVaultModal = ({ open, vault, salt, publicKey, onComplete, onReset }:
     };
 
     const handleResetPIN = async () => {
-        // Just notify parent to switch to Setup mode
         onReset();
         setShowResetConfirm(false);
     };
 
     if (showResetConfirm) {
+        const renderResetFooter = (
+            <div className="flex items-center justify-end gap-3 w-full">
+                <button
+                    type="button"
+                    onClick={() => setShowResetConfirm(false)}
+                    className="flex-1 sm:flex-initial px-5 sm:px-6 py-2.5 rounded-full border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="button"
+                    onClick={handleResetPIN}
+                    className="flex-1 sm:flex-initial px-5 sm:px-6 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md shadow-red-600/25 transition-all active:scale-95 cursor-pointer"
+                >
+                    Reset Everything
+                </button>
+            </div>
+        );
+
         return (
-            <Modal open={open} onClose={() => setShowResetConfirm(false)} title="Reset Chat PIN?">
-                <div className="space-y-6">
-                    <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex gap-4">
-                        <div className="text-destructive shrink-0">
-                            <Trash2 size={24} />
+            <Modal
+                open={open}
+                onClose={() => setShowResetConfirm(false)}
+                title="Reset Chat PIN?"
+                subtitle="Irreversible security action"
+                icon={<Trash2 size={20} />}
+                maxWidth="max-w-md"
+                footer={renderResetFooter}
+            >
+                <div className="space-y-4 py-1">
+                    <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 flex gap-3.5">
+                        <div className="text-red-500 shrink-0 mt-0.5">
+                            <ShieldAlert size={20} />
                         </div>
                         <div className="space-y-1">
-                            <h4 className="text-sm font-bold text-destructive uppercase tracking-wider">Warning</h4>
-                            <p className="text-xs text-muted-foreground leading-relaxed">
-                                After resetting your PIN, your <span className="text-foreground font-bold">old chats cannot be recovered</span>. All existing encrypted messages will become unreadable.
+                            <h4 className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">
+                                Permanent Data Loss Warning
+                            </h4>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                After resetting your PIN, your <span className="font-bold text-slate-900 dark:text-white">old chats cannot be recovered</span>. All existing encrypted messages will become unreadable.
                             </p>
                         </div>
                     </div>
 
-                    <div className="bg-muted/50 p-4 rounded-xl space-y-3">
-                        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase">
-                            <Info size={14} />
-                            What happens next?
+                    <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                            <Info size={14} className="text-purple-600 dark:text-purple-400" />
+                            <span>What happens next?</span>
                         </div>
-                        <ul className="text-xs text-muted-foreground space-y-2 list-disc pl-4">
+                        <ul className="text-xs text-slate-500 dark:text-slate-400 space-y-1.5 list-disc pl-4 leading-relaxed">
                             <li>Your current security keys will be deleted.</li>
                             <li>You will be prompted to set up a new Chat PIN.</li>
                             <li>Your contact list and groups will remain, but message history will be lost.</li>
                         </ul>
-                        <p className="text-[10px] text-muted-foreground leading-relaxed pt-2">
-                            For more information, please read our <Link to={ROUTES.PRIVACY_POLICY.path} className="text-primary font-bold hover:underline">Privacy Policy</Link>.
+                        <p className="text-[11px] text-slate-400 pt-1">
+                            For more information, please read our{" "}
+                            <Link to={ROUTES.PRIVACY_POLICY.path} className="text-purple-600 dark:text-purple-400 font-bold hover:underline">
+                                Privacy Policy
+                            </Link>.
                         </p>
-                    </div>
-
-                    <div className="flex gap-3 pt-2">
-                        <Button 
-                            variant="secondary" 
-                            fullWidth 
-                            onClick={() => setShowResetConfirm(false)}
-                            disabled={resetLoading}
-                        >
-                            Cancel
-                        </Button>
-                        <Button 
-                            variant="danger" 
-                            fullWidth 
-                            onClick={handleResetPIN}
-                            loading={resetLoading}
-                        >
-                            Reset Everything
-                        </Button>
                     </div>
                 </div>
             </Modal>
         );
     }
 
+    const renderFooter = (
+        <div className="w-full space-y-3">
+            <button
+                type="button"
+                onClick={handleUnlock}
+                disabled={loading || isUnlocked}
+                className={`w-full py-3 rounded-full text-xs sm:text-sm font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isUnlocked
+                        ? "bg-emerald-600 shadow-emerald-600/30"
+                        : "bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-600/25 hover:shadow-purple-600/40"
+                }`}
+            >
+                {loading ? (
+                    <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Verifying PIN...</span>
+                    </>
+                ) : isUnlocked ? (
+                    <>
+                        <Unlock size={16} />
+                        <span>Vault Decrypted</span>
+                    </>
+                ) : (
+                    <span>Access Chats</span>
+                )}
+            </button>
+
+            <p className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-wider flex items-center justify-center gap-1.5">
+                <Lock size={11} className="text-purple-500" />
+                <span>Your PIN never leaves this device.</span>
+            </p>
+        </div>
+    );
+
     return (
-        <Modal open={open} onClose={() => {}} title="Unlock Your Messages">
-            <div className="space-y-6">
+        <Modal
+            open={open}
+            onClose={() => {}}
+            title="Unlock Your Messages"
+            subtitle="End-to-end encrypted identity verification"
+            icon={<Lock size={20} />}
+            maxWidth="max-w-md"
+            footer={renderFooter}
+        >
+            <div className="space-y-6 py-2">
+                {/* Hero Icon & Title */}
                 <div className="flex flex-col items-center text-center space-y-3">
-                    <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl ${
+                    <div className={`w-18 h-18 sm:w-20 sm:h-20 rounded-3xl flex items-center justify-center transition-all duration-500 shadow-xl ${
                         isUnlocked 
-                        ? "bg-green-500 text-white scale-110 rotate-[360deg]" 
-                        : "bg-primary/10 text-primary"
+                            ? "bg-emerald-500 text-white scale-110 rotate-[360deg] shadow-emerald-500/30" 
+                            : "bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-purple-600/30"
                     }`}>
-                        {isUnlocked ? <BsFillUnlockFill size={36} /> : <BsFillLockFill size={36} />}
+                        {isUnlocked ? <Unlock size={32} /> : <Lock size={32} className="stroke-[2.2]" />}
                     </div>
                     <div>
-                        <h3 className="text-lg font-bold">Identity Verification</h3>
-                        <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                            Identity Verification
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed mt-1">
                             {isUnlocked 
                                 ? "Vault decrypted successfully. Entering chat..." 
                                 : "Messages are encrypted on this device. Enter your Chat PIN to restore your keys."
@@ -158,52 +212,43 @@ const UnlockVaultModal = ({ open, vault, salt, publicKey, onComplete, onReset }:
                     </div>
                 </div>
 
-                <div className="space-y-4">
-                    <Input
-                        label="Chat PIN"
-                        type="password"
-                        placeholder="Enter your 6-digit PIN"
-                        value={pin}
-                        onChange={(e) => setPin(e.target.value)}
-                        leftIcon={<BsFillLockFill size={16} />}
-                        disabled={loading || isUnlocked}
-                        onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
-                        autoFocus
-                    />
+                {/* Input Field */}
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 ml-0.5">
+                            Chat PIN
+                        </label>
+                        <Input
+                            type="password"
+                            placeholder="Enter your 6-digit PIN"
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value)}
+                            leftIcon={<KeyRound size={16} className="text-slate-400" />}
+                            disabled={loading || isUnlocked}
+                            onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
+                            autoFocus
+                            inputClassName="!bg-slate-50 dark:!bg-slate-900/80 !border-slate-200 dark:!border-slate-700/80 focus:!border-purple-500 focus:!ring-purple-500/20 rounded-xl text-center tracking-[0.3em] font-mono text-base"
+                        />
+                    </div>
+
                     <div className="flex justify-end">
                         <button 
                             type="button"
                             onClick={() => setShowResetConfirm(true)}
-                            className="text-xs font-bold text-primary hover:underline transition-all opacity-80 hover:opacity-100"
+                            className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors cursor-pointer"
                         >
                             Forgot PIN?
                         </button>
                     </div>
                 </div>
 
+                {/* Error Banner */}
                 {error && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-xs font-medium animate-in slide-in-from-top-1">
-                        <AlertCircle size={14} />
-                        {error}
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 text-xs font-medium animate-in slide-in-from-top-1">
+                        <AlertCircle size={15} className="shrink-0" />
+                        <span>{error}</span>
                     </div>
                 )}
-
-                <div className="pt-2">
-                    <Button 
-                        fullWidth 
-                        onClick={handleUnlock} 
-                        loading={loading}
-                        disabled={isUnlocked}
-                        className={`rounded-xl h-12 text-sm font-bold transition-all duration-300 ${
-                            isUnlocked ? "bg-green-500 hover:bg-green-600 scale-95 opacity-0" : ""
-                        }`}
-                    >
-                        Access Chats
-                    </Button>
-                    <p className="text-[10px] text-center text-muted-foreground mt-4 leading-relaxed uppercase tracking-wider font-bold opacity-60">
-                        Your PIN never leaves this device.
-                    </p>
-                </div>
             </div>
         </Modal>
     );

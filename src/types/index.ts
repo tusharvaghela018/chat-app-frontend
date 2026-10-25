@@ -4,6 +4,9 @@ export interface IUser {
     username: string
     avatar?: string
     is_online?: boolean
+    last_seen?: string
+    last_seen_privacy?: "everyone" | "contacts" | "nobody"
+    avatar_privacy?: "everyone" | "contacts" | "nobody"
     email?: string
     public_key?: string
     encrypted_vault?: string
@@ -77,6 +80,7 @@ export interface IConversation {
     status: 'pending' | 'accepted' | 'rejected'
     blocked_by_sender: boolean
     blocked_by_receiver: boolean
+    is_archived?: boolean
     created_at: string
     updated_at: string
 }

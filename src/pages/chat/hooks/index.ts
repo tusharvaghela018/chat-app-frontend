@@ -1,9 +1,31 @@
 import { useEffect, useRef, useState } from "react"
 import { Socket } from "socket.io-client"
+import { useQueryClient } from "@tanstack/react-query"
 import { CHAT_EVENTS } from "@/pages/chat/constants"
 import { GROUP_EVENTS } from "@/pages/chat/constants"
 import type { EncryptedMessage } from "@/utils/crypto"
 
+
+export interface IMessageReaction {
+    id: number
+    message_id: number
+    user_id: number
+    emoji: string
+}
+
+export interface IGroupMessageReaction {
+    id: number
+    group_message_id: number
+    user_id: number
+    emoji: string
+}
+
+export interface IStarredItem {
+    id?: number
+    user_id: number
+    message_id?: number | null
+    group_message_id?: number | null
+}
 
 export interface IMessage {
     id: number
@@ -14,6 +36,8 @@ export interface IMessage {
     created_at: string
     is_seen?: boolean
     is_pending?: boolean
+    reactions?: IMessageReaction[]
+    starred?: IStarredItem[]
 }
 
 interface UseChatProps {
@@ -33,6 +57,8 @@ interface UseChatReturn {
     emitMarkSeen: (conversationId: number, senderId: number) => void
     emitTypingStart: (receiverId: number) => void
     emitTypingStop: (receiverId: number) => void
+    emitToggleReaction: (messageId: number, emoji: string, receiverId: number) => void
+    emitToggleStar?: (messageId: number) => void
 }
 
 export const useChat = ({
@@ -42,11 +68,17 @@ export const useChat = ({
     initialMessages,
     onStatusUpdated,
 }: UseChatProps): UseChatReturn => {
+    const queryClient = useQueryClient()
     const [messages, setMessages] = useState<IMessage[]>(initialMessages ?? [])
     const [isTyping, setIsTyping] = useState(false)
 
     const activeConvRef = useRef<number | null>(null)
     const selectedUserRef = useRef<number | null>(null)
+    const currentUserIdRef = useRef(currentUserId)
+
+    useEffect(() => {
+        currentUserIdRef.current = currentUserId
+    }, [currentUserId])
 
     // keep ref in sync — used inside socket closures to avoid stale state
     useEffect(() => {
@@ -128,16 +160,45 @@ export const useChat = ({
             onStatusUpdated?.(data)
         }
 
+        // ── reactions ─────────────────────────────────────────────────────
+        const onReactionUpdated = ({ messageId, reactions }: { messageId: number; reactions: IMessageReaction[] }) => {
+            setMessages((prev) =>
+                prev.map((m) => (m.id === messageId ? { ...m, reactions } : m))
+            )
+        }
+
+        // ── star updated ──────────────────────────────────────────────────
+        const onStarUpdated = ({ messageId, isStarred }: { messageId: number; isStarred: boolean }) => {
+            const uid = currentUserIdRef.current
+            setMessages((prev) =>
+                prev.map((m) => {
+                    if (Number(m.id) !== Number(messageId)) return m
+                    const current = m.starred || []
+                    const filtered = current.filter((s) => Number(s.user_id) !== Number(uid))
+                    const nextStarred = isStarred
+                        ? [...filtered, { user_id: Number(uid) || 0, message_id: Number(messageId) }]
+                        : filtered
+                    return { ...m, starred: nextStarred }
+                })
+            )
+            queryClient.invalidateQueries({ queryKey: ["starred-messages"] })
+            queryClient.invalidateQueries({ queryKey: ["starred-messages-ids"] })
+        }
+
         socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, onReceiveMessage)
         socket.on(CHAT_EVENTS.MESSAGES_SEEN, onMessagesSeen)
         socket.on(CHAT_EVENTS.TYPING, onTyping)
         socket.on(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onConversationStatusUpdated)
+        socket.on(CHAT_EVENTS.REACTION_UPDATED, onReactionUpdated)
+        socket.on(CHAT_EVENTS.STAR_UPDATED, onStarUpdated)
 
         return () => {
             socket.off(CHAT_EVENTS.RECEIVE_MESSAGE, onReceiveMessage)
             socket.off(CHAT_EVENTS.MESSAGES_SEEN, onMessagesSeen)
             socket.off(CHAT_EVENTS.TYPING, onTyping)
             socket.off(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onConversationStatusUpdated)
+            socket.off(CHAT_EVENTS.REACTION_UPDATED, onReactionUpdated)
+            socket.off(CHAT_EVENTS.STAR_UPDATED, onStarUpdated)
         }
     }, [socket, currentUserId, onStatusUpdated])
 
@@ -162,6 +223,14 @@ export const useChat = ({
         socket?.emit(CHAT_EVENTS.TYPING_STOP, { receiverId })
     }
 
+    const emitToggleReaction = (messageId: number, emoji: string, receiverId: number) => {
+        socket?.emit(CHAT_EVENTS.TOGGLE_REACTION, { messageId, emoji, receiverId })
+    }
+
+    const emitToggleStar = (messageId: number) => {
+        socket?.emit(CHAT_EVENTS.TOGGLE_STAR, { messageId })
+    }
+
     return {
         messages,
         setMessages,
@@ -171,6 +240,8 @@ export const useChat = ({
         emitMarkSeen,
         emitTypingStart,
         emitTypingStop,
+        emitToggleReaction,
+        emitToggleStar,
     }
 }
 
@@ -188,6 +259,8 @@ export interface IGroupMessage {
         name: string
         avatar: string | null
     }
+    reactions?: IGroupMessageReaction[]
+    starred?: IStarredItem[]
 }
 
 interface TypingUser {
@@ -198,15 +271,22 @@ interface TypingUser {
 interface UseGroupChatProps {
     socket: Socket | null
     groupId: number
+    currentUserId?: number
     initialMessages?: IGroupMessage[]
     onMemberJoined?: () => void
     onMemberLeft?: () => void
 }
 
-export const useGroupChat = ({ socket, groupId, initialMessages, onMemberJoined, onMemberLeft }: UseGroupChatProps) => {
+export const useGroupChat = ({ socket, groupId, currentUserId, initialMessages, onMemberJoined, onMemberLeft }: UseGroupChatProps) => {
+    const queryClient = useQueryClient()
     const [messages, setMessages] = useState<IGroupMessage[]>(initialMessages ?? [])
     const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
     const typingTimeoutRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
+    const currentUserIdRef = useRef(currentUserId)
+
+    useEffect(() => {
+        currentUserIdRef.current = currentUserId
+    }, [currentUserId])
 
     // ── listen for incoming messages ──────────────────────────────────────
     useEffect(() => {
@@ -271,16 +351,63 @@ export const useGroupChat = ({ socket, groupId, initialMessages, onMemberJoined,
             onMemberLeft?.()
         }
 
+        // ── reactions ─────────────────────────────────────────────────────
+        const handleReactionUpdated = ({
+            groupMessageId,
+            groupId: gid,
+            reactions,
+        }: {
+            groupMessageId: number
+            groupId: number
+            reactions: IGroupMessageReaction[]
+        }) => {
+            if (gid !== groupId) return
+            setMessages((prev) =>
+                prev.map((m) => (m.id === groupMessageId ? { ...m, reactions } : m))
+            )
+        }
+
+        // ── star updated ──────────────────────────────────────────────────
+        const handleStarUpdated = ({
+            groupMessageId,
+            groupId: gid,
+            isStarred,
+        }: {
+            groupMessageId: number
+            groupId?: number
+            isStarred: boolean
+        }) => {
+            if (gid && gid !== groupId) return
+            const uid = currentUserIdRef.current
+            setMessages((prev) =>
+                prev.map((m) => {
+                    if (Number(m.id) !== Number(groupMessageId)) return m
+                    const current = m.starred || []
+                    const filtered = current.filter((s) => Number(s.user_id) !== Number(uid))
+                    const nextStarred = isStarred
+                        ? [...filtered, { user_id: Number(uid) || 0, group_message_id: Number(groupMessageId) }]
+                        : filtered
+                    return { ...m, starred: nextStarred }
+                })
+            )
+            queryClient.invalidateQueries({ queryKey: ["starred-messages"] })
+            queryClient.invalidateQueries({ queryKey: ["starred-messages-ids"] })
+        }
+
         socket.on(GROUP_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
         socket.on(GROUP_EVENTS.TYPING, handleTyping)
         socket.on(GROUP_EVENTS.MEMBER_JOINED, handleMemberJoined)
         socket.on(GROUP_EVENTS.MEMBER_LEFT, handleMemberLeft)
+        socket.on(GROUP_EVENTS.REACTION_UPDATED, handleReactionUpdated)
+        socket.on(GROUP_EVENTS.STAR_UPDATED, handleStarUpdated)
 
         return () => {
             socket.off(GROUP_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
             socket.off(GROUP_EVENTS.TYPING, handleTyping)
             socket.off(GROUP_EVENTS.MEMBER_JOINED, handleMemberJoined)
             socket.off(GROUP_EVENTS.MEMBER_LEFT, handleMemberLeft)
+            socket.off(GROUP_EVENTS.REACTION_UPDATED, handleReactionUpdated)
+            socket.off(GROUP_EVENTS.STAR_UPDATED, handleStarUpdated)
         }
     }, [socket, groupId])
 
@@ -316,6 +443,16 @@ export const useGroupChat = ({ socket, groupId, initialMessages, onMemberJoined,
         socket.emit(GROUP_EVENTS.TYPING_STOP, { groupId })
     }
 
+    const emitToggleReaction = (groupMessageId: number, emoji: string) => {
+        if (!socket) return
+        socket.emit(GROUP_EVENTS.TOGGLE_REACTION, { groupMessageId, groupId, emoji })
+    }
+
+    const emitToggleStar = (groupMessageId: number) => {
+        if (!socket) return
+        socket.emit(GROUP_EVENTS.TOGGLE_STAR, { groupMessageId, groupId })
+    }
+
     return {
         messages,
         setMessages,
@@ -324,5 +461,7 @@ export const useGroupChat = ({ socket, groupId, initialMessages, onMemberJoined,
         markSeen,
         emitTypingStart,
         emitTypingStop,
+        emitToggleReaction,
+        emitToggleStar,
     }
 }
