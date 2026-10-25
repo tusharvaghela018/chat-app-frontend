@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react"
 import { 
-    Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, 
+    Users, Info, UserPlus, UserMinus, MoreVertical, MoreHorizontal, MessageSquare, 
     Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, 
     Copy, ChevronLeft, X, Lock, Loader2, Video, Phone, Search, 
-    Smile, Star, ChevronUp, ChevronDown 
+    Smile, Star, ChevronUp, ChevronDown, Camera, Pencil, Settings, 
+    FileText, Image as ImageIcon 
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
@@ -82,7 +83,7 @@ const MemberMenu = ({
                 onClick={() => setOpen((prev) => !prev)}
                 className="h-8 w-8 text-muted-foreground hover:text-foreground"
             >
-                <MoreVertical size={14} />
+                <MoreHorizontal size={15} />
             </Button>
 
             {open && (
@@ -220,6 +221,8 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const [inviteLink, setInviteLink] = useState<string | null>(null)
     const [copied, setCopied] = useState(false)
     const [showJoinRequests, setShowJoinRequests] = useState(false)
+    const [infoTab, setInfoTab] = useState<"members" | "media" | "files">("members")
+    const [memberSearch, setMemberSearch] = useState("")
 
     // Media and voice note state
     const [isRecordingAudio, setIsRecordingAudio] = useState(false)
@@ -1386,192 +1389,327 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                 )}
             </div>
 
-            {/* info sidebar */}
+            {/* info sidebar matching mockup 3 & 4 */}
             <SidebarPanel
                 open={showInfo}
                 onClose={() => setShowInfo(false)}
                 position="right"
-                width="w-full sm:w-80"
+                width="w-full sm:w-[400px] md:w-[430px]"
                 title="Group Info"
             >
-                <div className="space-y-8">
-                    {/* ── header info ── */}
-                    <div className="flex flex-col items-center text-center px-2">
-                        <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-primary/10 text-primary font-bold text-3xl shadow-xl mb-4 overflow-hidden border-2 border-primary/20">
-                            {liveGroup.avatar
-                                ? <img src={liveGroup.avatar} className="h-full w-full object-cover" />
-                                : <Users size={40} />
-                            }
-                        </div>
-                        <h2 className="text-xl font-bold text-foreground">{liveGroup.name}</h2>
-                        <p className="text-sm text-muted-foreground mt-1">Group · {memberCount} members</p>
-                    </div>
-
-                    {/* ── description ── */}
-                    <div className="px-2">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">About</h3>
-                            {canEditInfo && (
-                                <button onClick={() => setShowEditGroup(true)} className="text-xs font-bold text-primary hover:underline">Edit</button>
-                            )}
-                        </div>
-                        <div className="rounded-2xl border bg-muted/30 p-4">
-                            <p className="text-sm text-foreground leading-relaxed">
-                                {liveGroup.description || "No description provided."}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* ── members list ── */}
-                    <div className="px-2">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">
-                                Members ({groupDetail?.members?.length || memberCount})
-                            </h3>
-                            {canAddMembers && (
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    onClick={() => setShowAddMember(true)}
-                                    className="h-7 px-3 rounded-lg text-xs"
-                                >
-                                    <UserPlus size={12} className="mr-1.5" /> Add
-                                </Button>
-                            )}
-                        </div>
-
-                        <div className="space-y-1">
-                            {groupDetail?.members?.map((m: IGroupMember) => (
-                                <div key={m.id} className="flex items-center gap-3 py-2 px-3 rounded-xl transition-colors hover:bg-muted/50 group/member">
-                                    <div className="relative flex-shrink-0">
-                                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-xs shadow-inner overflow-hidden border border-primary/20">
-                                            {m.user?.avatar
-                                                ? <img src={m.user.avatar} className="h-full w-full object-cover" />
-                                                : m.user?.name?.[0]?.toUpperCase()
-                                            }
-                                        </div>
-                                        {m.user?.is_online && (
-                                            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-green-500" />
-                                        )}
-                                    </div>
-
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-bold text-foreground truncate">
-                                            {m.user?.name}
-                                            {m.user?.id === authUser?.id && <span className="font-normal text-muted-foreground"> (you)</span>}
-                                        </p>
-                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{m.role}</p>
-                                    </div>
-
-                                    {m.user?.id !== authUser?.id && (
-                                        <MemberMenu
-                                            member={m}
-                                            isAdmin={isAdmin}
-                                            canRemove={canRemoveMembers}
-                                            onDM={() => {
-                                                if (m.user) onOpenDM(m.user as IUser)
-                                                setShowInfo(false)
-                                            }}
-                                            onMakeAdmin={() => setMemberToUpdateRole({ member: m, newRole: "admin" })}
-                                            onRemoveAdmin={() => setMemberToUpdateRole({ member: m, newRole: "member" })}
-                                            onRemove={() => setMemberToRemove(m)}
-                                        />
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* ── invite ── */}
-                    {canShareLink && (
-                        <div className="px-2">
-                             <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground mb-3">Invite Link</h3>
-                             {!inviteLink ? (
-                                <Button 
-                                    variant="secondary" 
-                                    fullWidth 
-                                    onClick={handleGenerateLink} 
-                                    loading={isGenerating}
-                                    className="rounded-xl h-10 text-xs font-bold"
-                                >
-                                    <Link2 size={14} className="mr-2" /> Generate Link
-                                </Button>
-                             ) : (
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2 rounded-xl border bg-muted/50 p-2 pr-3">
-                                        <p className="flex-1 truncate text-xs font-medium pl-1">{inviteLink}</p>
-                                        <button onClick={handleCopy} className="text-muted-foreground hover:text-foreground">
-                                            {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-                                        </button>
-                                    </div>
-                                    <button onClick={handleGenerateLink} className="text-[10px] font-bold text-primary uppercase tracking-wider hover:underline px-1">Regenerate Link</button>
-                                </div>
-                             )}
-                        </div>
-                    )}
-
-                    {/* ── settings ── */}
-                    {isAdmin && (
-                        <div className="px-2">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">Permissions</h3>
-                                <button onClick={() => setShowSettings(true)} className="text-xs font-bold text-primary hover:underline">Edit</button>
+                <div className="flex flex-col min-h-full space-y-5 pb-4">
+                    {/* ── 1. Group Profile Header ── */}
+                    <div className="flex flex-col items-center text-center pt-1 px-2">
+                        <div 
+                            className="relative group/avatar cursor-pointer" 
+                            onClick={() => canEditInfo && setShowEditGroup(true)}
+                            title={canEditInfo ? "Change group photo" : undefined}
+                        >
+                            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-600 flex items-center justify-center text-white font-bold text-3xl shadow-lg overflow-hidden border-2 border-white dark:border-slate-800">
+                                {liveGroup.avatar ? (
+                                    <img src={liveGroup.avatar} className="w-full h-full object-cover" />
+                                ) : (
+                                    <Users size={38} />
+                                )}
                             </div>
-                            <div className="space-y-2">
-                                {[
-                                    { label: "Messaging", value: liveGroup.settings?.who_can_send },
-                                    { label: "Editing Info", value: liveGroup.settings?.who_can_edit_info },
-                                    { label: "Adding Members", value: liveGroup.settings?.who_can_add_members },
-                                ].map((s) => (
-                                    <div key={s.label} className="flex items-center justify-between rounded-xl border border-dashed p-3">
-                                        <p className="text-xs font-medium text-muted-foreground">{s.label}</p>
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/20">
-                                            {s.value}
+                            {canEditInfo && (
+                                <div className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 group-hover/avatar:scale-110 transition-transform">
+                                    <Camera size={13} />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Group Name + Edit Pencil */}
+                        <div className="flex items-center justify-center gap-1.5 mt-3">
+                            <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                                {liveGroup.name}
+                            </h2>
+                            {canEditInfo && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEditGroup(true)}
+                                    className="p-1 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 rounded-md transition-colors"
+                                    title="Edit group name"
+                                >
+                                    <Pencil size={13} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Subtitle row: members count · E2EE badge */}
+                        <div className="flex items-center justify-center gap-2 mt-1">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {memberCount} member{memberCount !== 1 ? "s" : ""}
+                            </span>
+                            <span className="text-slate-300 dark:text-slate-600">·</span>
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/60">
+                                <Lock size={10} className="text-slate-500" />
+                                <span>End-to-end encrypted</span>
+                            </div>
+                        </div>
+
+                        {/* Description box with edit pencil */}
+                        <div className="relative w-full mt-3.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800 text-left">
+                            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pr-6">
+                                {liveGroup.description || "A space for discussions, feedback and creative ideas."}
+                            </p>
+                            {canEditInfo && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEditGroup(true)}
+                                    className="absolute top-2.5 right-2.5 p-1 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 rounded-md transition-colors"
+                                    title="Edit description"
+                                >
+                                    <Pencil size={12} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ── 2. Quick Actions: Settings & Invite ── */}
+                    <div className="space-y-1 px-1">
+                        {isAdmin && (
+                            <button
+                                type="button"
+                                onClick={() => setShowSettings(true)}
+                                className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors text-left group/action cursor-pointer"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 group-hover/action:text-purple-600 dark:group-hover/action:text-purple-400 transition-colors">
+                                        <Settings size={16} />
+                                    </div>
+                                    <span className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                        Group Settings
+                                    </span>
+                                </div>
+                                <ChevronRight size={15} className="text-slate-400" />
+                            </button>
+                        )}
+
+                        {canShareLink && (
+                            <div className="space-y-1.5">
+                                <button
+                                    type="button"
+                                    onClick={inviteLink ? handleCopy : handleGenerateLink}
+                                    className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors text-left group/action cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 group-hover/action:text-purple-600 dark:group-hover/action:text-purple-400 transition-colors">
+                                            <Link2 size={16} />
+                                        </div>
+                                        <span className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                            Invite Link
                                         </span>
                                     </div>
-                                ))}
+                                    <div className="flex items-center gap-1.5">
+                                        {copied && (
+                                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                                                <Check size={12} /> Copied
+                                            </span>
+                                        )}
+                                        <ChevronRight size={15} className="text-slate-400" />
+                                    </div>
+                                </button>
+                                {inviteLink && (
+                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/60 dark:border-purple-800/50 text-[11px] text-purple-700 dark:text-purple-300">
+                                        <p className="flex-1 truncate font-mono text-[10px]">{inviteLink}</p>
+                                        <button 
+                                            type="button"
+                                            onClick={handleCopy}
+                                            className="font-bold underline text-[10px] hover:text-purple-900 dark:hover:text-purple-100 cursor-pointer"
+                                        >
+                                            Copy
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
-                    {/* ── danger zone ── */}
-                    <div className="pt-4 border-t px-2">
-                         <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-destructive mb-3">Danger Zone</h3>
-                         <div className="space-y-2">
-                            {isAdmin && liveGroup.join_mode === "approval" && (
-                                <Button
-                                    variant="ghost"
-                                    fullWidth
-                                    onClick={() => setShowJoinRequests(true)}
-                                    className="justify-between rounded-xl h-11 px-4 text-primary hover:bg-primary/5 border border-primary/20"
-                                >
-                                    <span className="flex items-center gap-2 font-bold text-sm"><Users size={16} /> Join Requests</span>
-                                    <ChevronRight size={14} />
-                                </Button>
-                            )}
-
-                            <Button
-                                variant="ghost"
-                                fullWidth
-                                onClick={() => setShowLeaveConfirm(true)}
-                                className="justify-between rounded-xl h-11 px-4 text-orange-500 hover:bg-orange-500/10 border border-orange-500/20"
+                    {/* ── 3. Tabs: Members / Media / Files ── */}
+                    <div className="border-t border-slate-200/80 dark:border-slate-800 pt-2">
+                        <div className="flex items-center border-b border-slate-200/80 dark:border-slate-800 px-2">
+                            <button
+                                type="button"
+                                onClick={() => setInfoTab("members")}
+                                className={`pb-2.5 px-3 text-xs font-bold transition-all relative cursor-pointer ${
+                                    infoTab === "members"
+                                        ? "text-purple-600 dark:text-purple-400 border-b-2 border-purple-600"
+                                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                }`}
                             >
-                                <span className="flex items-center gap-2 font-bold text-sm"><LogOut size={16} /> Leave Group</span>
-                                <ChevronRight size={14} />
-                            </Button>
+                                Members ({groupDetail?.members?.length || memberCount})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setInfoTab("media")}
+                                className={`pb-2.5 px-3 text-xs font-bold transition-all relative cursor-pointer ${
+                                    infoTab === "media"
+                                        ? "text-purple-600 dark:text-purple-400 border-b-2 border-purple-600"
+                                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                }`}
+                            >
+                                Media
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setInfoTab("files")}
+                                className={`pb-2.5 px-3 text-xs font-bold transition-all relative cursor-pointer ${
+                                    infoTab === "files"
+                                        ? "text-purple-600 dark:text-purple-400 border-b-2 border-purple-600"
+                                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                }`}
+                            >
+                                Files
+                            </button>
+                        </div>
 
-                            {isAdmin && (
-                                <Button
-                                    variant="ghost"
-                                    fullWidth
-                                    onClick={() => setShowDeleteConfirm(true)}
-                                    className="justify-between rounded-xl h-11 px-4 text-destructive hover:bg-destructive/5 border border-destructive/20"
-                                >
-                                    <span className="flex items-center gap-2 font-bold text-sm"><Trash2 size={16} /> Delete Group</span>
-                                    <ChevronRight size={14} />
-                                </Button>
+                        {/* Tab Content */}
+                        <div className="pt-3 px-1">
+                            {infoTab === "members" && (
+                                <div className="space-y-3">
+                                    {/* Member Search input */}
+                                    <div className="relative">
+                                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            value={memberSearch}
+                                            onChange={(e) => setMemberSearch(e.target.value)}
+                                            placeholder="Search members..."
+                                            className="w-full pl-9 pr-4 py-2 text-xs bg-slate-100 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                        />
+                                    </div>
+
+                                    {canAddMembers && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAddMember(true)}
+                                            className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-dashed border-purple-300 dark:border-purple-800/80 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30 text-xs font-bold transition-colors cursor-pointer"
+                                        >
+                                            <UserPlus size={14} />
+                                            <span>Add Member</span>
+                                        </button>
+                                    )}
+
+                                    {/* Members list */}
+                                    <div className="space-y-1">
+                                        {(groupDetail?.members || [])
+                                            .filter((m: IGroupMember) => 
+                                                !memberSearch.trim() || 
+                                                m.user?.name?.toLowerCase().includes(memberSearch.toLowerCase()) ||
+                                                m.user?.username?.toLowerCase().includes(memberSearch.toLowerCase())
+                                            )
+                                            .map((m: IGroupMember) => {
+                                                const isUserAdmin = m.role === "admin"
+                                                return (
+                                                    <div 
+                                                        key={m.id} 
+                                                        className="flex items-center gap-3 py-2 px-2.5 rounded-xl transition-colors hover:bg-slate-100/70 dark:hover:bg-slate-800/50 group/member"
+                                                    >
+                                                        <div className="relative flex-shrink-0">
+                                                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 text-white font-bold text-xs shadow-xs overflow-hidden">
+                                                                {m.user?.avatar ? (
+                                                                    <img src={m.user.avatar} className="h-full w-full object-cover" />
+                                                                ) : (
+                                                                    m.user?.name?.[0]?.toUpperCase()
+                                                                )}
+                                                            </div>
+                                                            {m.user?.is_online && (
+                                                                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500" />
+                                                            )}
+                                                        </div>
+
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+                                                                {m.user?.name}
+                                                                {m.user?.id === authUser?.id && (
+                                                                    <span className="font-normal text-slate-400 text-xs"> (you)</span>
+                                                                )}
+                                                            </p>
+                                                            <p className="text-[11px] font-medium text-slate-400 truncate flex items-center gap-1">
+                                                                {m.user?.is_online ? (
+                                                                    <span className="text-emerald-500 font-semibold">● Online</span>
+                                                                ) : (
+                                                                    <span>Offline</span>
+                                                                )}
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Role Badge */}
+                                                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                                                isUserAdmin
+                                                                    ? "bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60"
+                                                                    : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60"
+                                                            }`}>
+                                                                {m.role}
+                                                            </span>
+
+                                                            {m.user?.id !== authUser?.id && (
+                                                                <MemberMenu
+                                                                    member={m}
+                                                                    isAdmin={isAdmin}
+                                                                    canRemove={canRemoveMembers}
+                                                                    onDM={() => {
+                                                                        if (m.user) onOpenDM(m.user as IUser)
+                                                                        setShowInfo(false)
+                                                                    }}
+                                                                    onMakeAdmin={() => setMemberToUpdateRole({ member: m, newRole: "admin" })}
+                                                                    onRemoveAdmin={() => setMemberToUpdateRole({ member: m, newRole: "member" })}
+                                                                    onRemove={() => setMemberToRemove(m)}
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                    </div>
+                                </div>
                             )}
-                         </div>
+
+                            {infoTab === "media" && (
+                                <div className="py-6 text-center">
+                                    <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto mb-2">
+                                        <ImageIcon size={22} />
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Shared Media</p>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">Photos and videos shared in this group will appear here.</p>
+                                </div>
+                            )}
+
+                            {infoTab === "files" && (
+                                <div className="py-6 text-center">
+                                    <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto mb-2">
+                                        <FileText size={22} />
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Shared Documents</p>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">PDFs and documents shared in this group will appear here.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ── 4. Danger Zone: Leave Group ── */}
+                    <div className="pt-4 mt-auto border-t border-slate-100 dark:border-slate-800 px-1">
+                        {isAdmin && liveGroup.join_mode === "approval" && (
+                            <button
+                                type="button"
+                                onClick={() => setShowJoinRequests(true)}
+                                className="w-full mb-2 py-2.5 px-3 rounded-xl border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30 text-xs font-bold flex items-center justify-between transition-colors cursor-pointer"
+                            >
+                                <span className="flex items-center gap-2"><Users size={15} /> Join Requests</span>
+                                <ChevronRight size={14} />
+                            </button>
+                        )}
+
+                        <button
+                            type="button"
+                            onClick={() => setShowLeaveConfirm(true)}
+                            className="w-full py-2.5 px-4 rounded-xl bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                        >
+                            <LogOut size={15} />
+                            <span>Leave Group</span>
+                        </button>
                     </div>
                 </div>
             </SidebarPanel>
@@ -1582,8 +1720,13 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             <ConfirmDialog open={!!memberToRemove} onClose={() => setMemberToRemove(null)} onConfirm={handleRemoveConfirm} title="Remove Member" message={`Remove ${memberToRemove?.user?.name} from the group?`} confirmText="Remove" variant="danger" isLoading={isRemoving} />
             <ConfirmDialog open={!!memberToUpdateRole} onClose={() => setMemberToUpdateRole(null)} onConfirm={handleRoleConfirm} title={memberToUpdateRole?.newRole === "admin" ? "Make Admin" : "Remove Admin"} message={memberToUpdateRole?.newRole === "admin" ? `Promote ${memberToUpdateRole?.member.user?.name} to admin?` : `Remove admin rights for ${memberToUpdateRole?.member.user?.name}?`} confirmText="Confirm" variant="info" isLoading={isUpdatingRole} />
 
-            <AddMemberModal open={showAddMember} onClose={() => setShowAddMember(false)} groupId={group.id} />
-            {liveGroup.settings && <GroupSettingsModal open={showSettings} onClose={() => setShowSettings(false)} groupId={group.id} settings={liveGroup.settings} />}
+            <AddMemberModal 
+                open={showAddMember} 
+                onClose={() => setShowAddMember(false)} 
+                groupId={group.id} 
+                existingMemberIds={(groupDetail?.members || []).map((m: any) => m.user?.id || m.user_id)}
+            />
+            {liveGroup.settings && <GroupSettingsModal open={showSettings} onClose={() => setShowSettings(false)} groupId={group.id} groupName={liveGroup.name} settings={liveGroup.settings} />}
             <EditGroupModal open={showEditGroup} onClose={() => setShowEditGroup(false)} group={liveGroup} />
             <JoinRequestsModal open={showJoinRequests} onClose={() => setShowJoinRequests(false)} groupId={group.id} />
         </div>
