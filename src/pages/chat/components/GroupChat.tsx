@@ -1106,14 +1106,12 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                             setHoveredMsgId(null)
                                         }
                                     }}
-                                    className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 transition-all duration-200 rounded-2xl p-1 -m-1 ${
+                                    className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 transition-all duration-200 rounded-2xl ${
                                         isCurrentSearchMatch
-                                            ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] scale-[1.01]"
+                                            ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] scale-[1.01] p-1"
                                             : isSearchMatch
-                                                ? "bg-purple-500/5 ring-1 ring-purple-400/40"
+                                                ? "bg-purple-500/5 ring-1 ring-purple-400/40 p-1"
                                                 : ""
-                                    } ${
-                                        msgAggReactions.length > 0 ? "mb-3.5" : ""
                                     } ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
                                 >
                                     {!isMine && (
@@ -1230,7 +1228,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                             </p>
                                         )}
 
-                                        {/* bubble & docked attached reaction badge */}
+                                        {/* bubble */}
                                         <div className="relative inline-block">
                                             {isImage ? (
                                                 <ImageBubble
@@ -1278,36 +1276,38 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                                     </div>
                                                 </div>
                                             )}
-
-                                            {/* Attached reaction pill docked to bottom edge of bubble */}
-                                            {msgAggReactions.length > 0 && (
-                                                <div className={`absolute -bottom-2.5 z-10 flex items-center gap-1 ${
-                                                    isMine ? "right-2" : "left-2"
-                                                }`}>
-                                                    <div className="flex items-center gap-1 bg-white/95 dark:bg-[#1e293b]/95 border border-slate-200/90 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-xs backdrop-blur-md">
-                                                        {msgAggReactions.map(r => (
-                                                            <button 
-                                                                key={r.emoji}
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    handleToggleReaction(msg.id, r.emoji)
-                                                                }}
-                                                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs transition-all hover:scale-110 active:scale-95 ${
-                                                                    r.hasReacted
-                                                                        ? "bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 font-bold"
-                                                                        : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                                                }`}
-                                                                title={r.hasReacted ? `You reacted with ${r.emoji} (click to remove)` : `Reacted with ${r.emoji}`}
-                                                            >
-                                                                <span className="text-xs leading-none">{r.emoji}</span>
-                                                                <span className="text-[10px] font-bold leading-none">{r.count}</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
+
+                                        {/* Attached reaction pill docked below bubble */}
+                                        {msgAggReactions.length > 0 && (
+                                            <div className={`relative z-20 -mt-2.5 flex items-center ${
+                                                isMine ? "mr-1.5 justify-end" : "ml-1.5 justify-start"
+                                            } max-w-full`}>
+                                                <div className="flex flex-wrap items-center gap-1 bg-white/95 dark:bg-[#1a233a]/95 border border-slate-200/90 dark:border-slate-700/80 rounded-full px-2.5 py-0.5 shadow-sm backdrop-blur-md max-w-full">
+                                                    {msgAggReactions.map(r => (
+                                                        <button 
+                                                            key={r.emoji}
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleToggleReaction(msg.id, r.emoji)
+                                                            }}
+                                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs transition-all hover:scale-110 active:scale-95 ${
+                                                                r.hasReacted
+                                                                    ? "bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 font-bold"
+                                                                    : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                                            }`}
+                                                            title={r.hasReacted ? `You reacted with ${r.emoji} (click to remove)` : `Reacted with ${r.emoji}`}
+                                                        >
+                                                            <span className="text-sm leading-none">{r.emoji}</span>
+                                                            {r.count > 1 && (
+                                                                <span className="text-[10px] font-semibold leading-none">{r.count}</span>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )

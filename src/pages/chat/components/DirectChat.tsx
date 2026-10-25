@@ -3,7 +3,7 @@ import { useSelector } from "react-redux"
 import { 
     User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert, 
     Ban, Check, UserMinus, Loader2, Video, Phone, Search, 
-    Smile, CheckCheck, Copy, Archive, ArchiveRestore, Star, MoreVertical,
+    Smile, CheckCheck, Copy, Archive, ArchiveRestore, Star, MoreVertical, MoreHorizontal,
     ChevronUp, ChevronDown
 } from "lucide-react"
 import { useGetApi, usePatchApi } from "@/hooks/api"
@@ -29,6 +29,7 @@ import AudioRecorderBar from "@/pages/chat/components/media/AudioRecorderBar"
 import ImageBubble from "@/pages/chat/components/media/ImageBubble"
 import RichTextRenderer from "@/pages/chat/components/RichTextRenderer"
 import RichMessageInput from "@/pages/chat/components/input/RichMessageInput"
+import UserProfileModal from "./UserProfileModal"
 
 interface Props {
     user: IUser
@@ -68,6 +69,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const [isUploadingMedia, setIsUploadingMedia] = useState(false)
     const [uploadingFile, setUploadingFile] = useState<{ name: string; size?: number; type?: string } | null>(null)
     const [showMoreMenu, setShowMoreMenu] = useState(false)
+    const [showProfileModal, setShowProfileModal] = useState(false)
 
     // Chat search state
     const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -701,54 +703,60 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             <ChevronLeft size={22} />
                         </Button>
                     )}
-                    <div className="relative flex-shrink-0">
-                        <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 font-display text-sm font-bold text-white shadow-xs overflow-hidden">
-                            {user.avatar
-                                ? <img src={user.avatar} className="h-full w-full object-cover" />
-                                : <User size={18} />
-                            }
-                        </div>
-                        {isOnline && (
-                            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-white dark:border-[#111827] bg-emerald-500 shadow-2xs" />
-                        )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                            <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{user.name}</p>
-                            <div className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-tight flex-shrink-0">
-                                <Lock size={8} strokeWidth={3} /> E2EE
+                    <div
+                        onClick={() => setShowProfileModal(true)}
+                        className="flex items-center gap-2.5 sm:gap-3 min-w-0 cursor-pointer group"
+                        title="Click to view profile"
+                    >
+                        <div className="relative flex-shrink-0">
+                            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 font-display text-sm font-bold text-white shadow-xs overflow-hidden group-hover:ring-2 group-hover:ring-purple-400 transition-all">
+                                {user.avatar
+                                    ? <img src={user.avatar} className="h-full w-full object-cover" />
+                                    : <User size={18} />
+                                }
                             </div>
-                        </div>
-                        <p className="text-xs font-medium truncate">
-                            {isTyping ? (
-                                <span className="text-purple-600 dark:text-purple-400 font-semibold animate-pulse">typing...</span>
+                            {iBlocked ? (
+                                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-white dark:border-[#111827] bg-red-600 shadow-2xs" />
                             ) : isOnline ? (
-                                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-                                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                    Online
-                                </span>
+                                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-white dark:border-[#111827] bg-emerald-500 shadow-2xs" />
                             ) : (
-                                <span className="text-slate-400 dark:text-slate-500">
-                                    {formatLastActive(lastSeen)}
-                                </span>
+                                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-white dark:border-[#111827] bg-slate-400 shadow-2xs" />
                             )}
-                        </p>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                                <p className="truncate text-sm font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">{user.name}</p>
+                                <div className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-tight flex-shrink-0">
+                                    <Lock size={8} strokeWidth={3} /> E2EE
+                                </div>
+                            </div>
+                            <p className="text-xs font-medium truncate">
+                                {iBlocked ? (
+                                    <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-semibold">
+                                        <Ban size={12} className="stroke-[2.5]" />
+                                        Blocked
+                                    </span>
+                                ) : isTyping ? (
+                                    <span className="text-purple-600 dark:text-purple-400 font-semibold animate-pulse">typing...</span>
+                                ) : isOnline ? (
+                                    <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        Online
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500 font-medium">
+                                        <span className="h-2 w-2 rounded-full bg-slate-400"></span>
+                                        {lastSeen ? formatLastActive(lastSeen) : "Offline"}
+                                    </span>
+                                )}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
                 {/* header action icons */}
-                <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-                    {/* 1. Video call (directly visible) */}
-                    <button
-                        type="button"
-                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        title="Start video call"
-                        aria-label="Start video call"
-                    >
-                        <Video size={18} />
-                    </button>
-
-                    {/* 2. Audio/Voice call (directly visible) */}
+                <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+                    {/* 1. Audio/Voice call (directly visible) */}
                     <button
                         type="button"
                         className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -758,22 +766,32 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                         <Phone size={18} />
                     </button>
 
-                    {/* 3. Search messages (directly visible & workable) */}
+                    {/* 2. Video call (directly visible) */}
                     <button
                         type="button"
-                        onClick={() => setIsSearchOpen((prev) => !prev)}
-                        className={`p-2 rounded-full transition-colors ${
-                            isSearchOpen
-                                ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 ring-1 ring-purple-500/30"
-                                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
-                        }`}
-                        title="Search messages"
-                        aria-label="Search messages"
+                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Start video call"
+                        aria-label="Start video call"
                     >
-                        <Search size={18} />
+                        <Video size={18} />
                     </button>
 
-                    {/* 4. Three-dots More Menu for other options (Archive, Block, etc.) */}
+                    {/* 3. Block button (directly visible with red accent circle matching mockup) */}
+                    <button
+                        type="button"
+                        onClick={() => handleToggleBlock(!iBlocked)}
+                        className={`p-2 rounded-full transition-all ${
+                            iBlocked
+                                ? "text-red-600 bg-red-100/90 dark:bg-red-950/70 ring-1 ring-red-400/60 shadow-2xs hover:bg-red-200 dark:hover:bg-red-900/60"
+                                : "text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
+                        }`}
+                        title={iBlocked ? "Unblock user" : "Block user"}
+                        aria-label={iBlocked ? "Unblock user" : "Block user"}
+                    >
+                        <Ban size={18} className="stroke-[2.2]" />
+                    </button>
+
+                    {/* 4. Three-dots More Menu for other options (Search, Profile, Archive, Close) */}
                     <div className="relative">
                         <button
                             type="button"
@@ -786,11 +804,35 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             title="More options"
                             aria-label="More options"
                         >
-                            <MoreVertical size={18} />
+                            <MoreHorizontal size={18} />
                         </button>
 
                         {showMoreMenu && (
                             <div className="header-more-menu absolute right-0 mt-2 w-52 rounded-xl bg-white dark:bg-[#1e293b] py-1.5 shadow-xl border border-slate-200 dark:border-slate-700/80 z-50 text-xs font-medium text-slate-700 dark:text-slate-200 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowMoreMenu(false)
+                                        setIsSearchOpen(true)
+                                    }}
+                                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+                                >
+                                    <Search size={16} className="text-purple-600 dark:text-purple-400" />
+                                    <span>Search messages</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowMoreMenu(false)
+                                        setShowProfileModal(true)
+                                    }}
+                                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+                                >
+                                    <User size={16} className="text-purple-600 dark:text-purple-400" />
+                                    <span>View profile</span>
+                                </button>
+
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -1030,14 +1072,12 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                             setHoveredMsgId(null)
                                         }
                                     }}
-                                    className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 transition-all duration-200 rounded-2xl p-1 -m-1 ${
+                                    className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 transition-all duration-200 rounded-2xl ${
                                         isCurrentSearchMatch
-                                            ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] scale-[1.01]"
+                                            ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] scale-[1.01] p-1"
                                             : isSearchMatch
-                                                ? "bg-purple-500/5 ring-1 ring-purple-400/40"
+                                                ? "bg-purple-500/5 ring-1 ring-purple-400/40 p-1"
                                                 : ""
-                                    } ${
-                                        msgAggReactions.length > 0 ? "mb-3.5" : ""
                                     } ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
                                 >
                                     {/* Left avatar for received messages matching mockup */}
@@ -1150,7 +1190,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                     )}
                                                 </div>
 
-                                                {/* bubble & docked attached reaction badge */}
+                                                {/* bubble */}
                                                 <div className="relative inline-block">
                                                     {isImage ? (
                                                         <ImageBubble
@@ -1215,36 +1255,36 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                             </div>
                                                         </div>
                                                     )}
-
-                                                    {/* Attached reaction pill docked to bottom edge of bubble */}
-                                                    {msgAggReactions.length > 0 && (
-                                                        <div className={`absolute -bottom-2.5 z-10 flex items-center gap-1 ${
-                                                            isMine ? "right-2" : "left-2"
-                                                        }`}>
-                                                            <div className="flex items-center gap-1 bg-white/95 dark:bg-[#1e293b]/95 border border-slate-200/90 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-xs backdrop-blur-md">
-                                                                {msgAggReactions.map(({ emoji, count, hasReacted }) => (
-                                                                    <button
-                                                                        key={emoji}
-                                                                        type="button"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            handleToggleReaction(msg.id, emoji)
-                                                                        }}
-                                                                        className={`flex items-center gap-1 text-[11px] px-1 py-0.5 rounded-full transition-transform hover:scale-110 active:scale-95 ${
-                                                                            hasReacted
-                                                                                ? "bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-bold"
-                                                                                : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                                                                        }`}
-                                                                        title={hasReacted ? `You reacted with ${emoji} (click to remove)` : `Reacted with ${emoji}`}
-                                                                    >
-                                                                        <span>{emoji}</span>
-                                                                        {count > 1 && <span className="text-[9px] font-semibold">{count}</span>}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
                                                 </div>
+
+                                                {/* Attached reaction pill docked below bubble */}
+                                                {msgAggReactions.length > 0 && (
+                                                    <div className={`relative z-20 -mt-2.5 flex items-center ${
+                                                        isMine ? "mr-1.5 justify-end" : "ml-1.5 justify-start"
+                                                    } max-w-full`}>
+                                                        <div className="flex flex-wrap items-center gap-1 bg-white/95 dark:bg-[#1a233a]/95 border border-slate-200/90 dark:border-slate-700/80 rounded-full px-2.5 py-0.5 shadow-sm backdrop-blur-md max-w-full">
+                                                            {msgAggReactions.map(({ emoji, count, hasReacted }) => (
+                                                                <button
+                                                                    key={emoji}
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        handleToggleReaction(msg.id, emoji)
+                                                                    }}
+                                                                    className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full transition-transform hover:scale-110 active:scale-95 ${
+                                                                        hasReacted
+                                                                            ? "bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-bold"
+                                                                            : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                                                    }`}
+                                                                    title={hasReacted ? `You reacted with ${emoji} (click to remove)` : `Reacted with ${emoji}`}
+                                                                >
+                                                                    <span className="text-sm leading-none">{emoji}</span>
+                                                                    {count > 1 && <span className="text-[10px] font-semibold">{count}</span>}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                 </div>
                             )
@@ -1274,19 +1314,31 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             {/* footer / input area matching mockup */}
             <div className="border-t border-slate-200/90 dark:border-slate-800/80 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md p-3 sm:p-4 pb-safe">
                 {iBlocked ? (
-                    <div className="flex flex-col items-center justify-center py-4 space-y-3 bg-red-50/70 dark:bg-red-950/30 rounded-2xl border border-red-200/80 dark:border-red-900/50">
-                        <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-bold text-sm">
-                            <Ban size={18} />
-                            You have blocked this user
+                    <div className="max-w-2xl mx-auto my-1 p-5 sm:p-7 rounded-2xl sm:rounded-3xl text-center bg-[#fef2f2] dark:bg-[#1a1217] border border-[#fecdd3] dark:border-[#881337]/50 shadow-xs animate-in fade-in duration-200">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/80 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/60 shadow-xs">
+                            <ShieldAlert size={24} className="stroke-[2.2]" />
                         </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleToggleBlock(false)}
-                            className="rounded-xl border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
-                        >
-                            Unblock {user.name}
-                        </Button>
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                            You have blocked this user
+                        </h3>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+                            You won't receive messages or calls from {user.name}.
+                        </p>
+                        <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-4 max-w-xs sm:max-w-md mx-auto">
+                            <Button
+                                onClick={() => handleToggleBlock(false)}
+                                className="w-full sm:w-auto px-7 py-2.5 rounded-full text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/25 transition-all active:scale-95"
+                            >
+                                Unblock User
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowProfileModal(true)}
+                                className="w-full sm:w-auto px-7 py-2.5 rounded-full text-xs sm:text-sm font-bold border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 bg-white/70 dark:bg-slate-900/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all active:scale-95"
+                            >
+                                View Profile
+                            </Button>
+                        </div>
                     </div>
                 ) : iAmRejected ? (
                     <div className="flex flex-col items-center justify-center py-4 space-y-1 bg-slate-100 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
@@ -1403,6 +1455,16 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                     </div>
                 )}
             </div>
+
+            {/* User Profile Modal */}
+            <UserProfileModal
+                open={showProfileModal}
+                onClose={() => setShowProfileModal(false)}
+                user={user}
+                isBlocked={!!iBlocked}
+                isOnline={isOnline}
+                onToggleBlock={handleToggleBlock}
+            />
         </div>
     )
 }

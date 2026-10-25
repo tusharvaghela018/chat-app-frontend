@@ -246,8 +246,8 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
                                     <div className="flex items-center justify-between gap-2">
                                         <p className="text-[11px] font-normal truncate text-slate-600 dark:text-slate-400">
                                             {iBlocked ? (
-                                                <span className="flex items-center gap-1 text-red-500 font-medium">
-                                                    <Ban size={11} /> Blocked
+                                                <span className="flex items-center gap-1 text-red-500 dark:text-red-400 font-medium">
+                                                    <Ban size={11} className="stroke-[2.5]" /> Blocked user
                                                 </span>
                                             ) : isPending && isIRecipient ? (
                                                 <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400 font-semibold animate-pulse">

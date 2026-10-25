@@ -167,15 +167,21 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
                 title={isViewable ? `Click to preview ${name}` : `Click to download ${name}`}
             >
                 <div className="flex items-center gap-3">
-                    {/* File format badge */}
-                    <div
-                        className={`h-11 w-11 shrink-0 rounded-xl flex flex-col items-center justify-center font-black shadow-sm transition-transform group-hover:scale-105 ${badge.bg}`}
-                    >
-                        {badge.icon}
-                        <span className="text-[9px] tracking-wider uppercase font-black -mt-0.5">
-                            {ext.slice(0, 4)}
-                        </span>
-                    </div>
+                    {/* File format badge matching mockup */}
+                    {isPdf ? (
+                        <div className="h-11 w-11 shrink-0 rounded-xl bg-red-600 text-white flex items-center justify-center font-extrabold text-sm lowercase tracking-tight shadow-sm shadow-red-600/30 group-hover:scale-105 transition-transform">
+                            pdf
+                        </div>
+                    ) : (
+                        <div
+                            className={`h-11 w-11 shrink-0 rounded-xl flex flex-col items-center justify-center font-black shadow-sm transition-transform group-hover:scale-105 ${badge.bg}`}
+                        >
+                            {badge.icon}
+                            <span className="text-[9px] tracking-wider uppercase font-black -mt-0.5">
+                                {ext.slice(0, 4)}
+                            </span>
+                        </div>
+                    )}
 
                     {/* File metadata */}
                     <div className="flex-1 min-w-0 pr-1">
