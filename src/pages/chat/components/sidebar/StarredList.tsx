@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react"
-import { Star, Users, User, Search, ArrowRight, Mic, FileText } from "lucide-react"
+import { Star, Users, User, Search, ArrowRight, Mic, FileText, Image as ImageIcon } from "lucide-react"
 import { useGetApi } from "@/hooks/api"
 import axiosInstance from "@/api/axios"
 import { useQueryClient } from "@tanstack/react-query"
@@ -90,6 +90,9 @@ export const StarredList: React.FC<StarredListProps> = ({
 
         try {
             const parsed = JSON.parse(raw)
+            if (parsed.type === "image" || (parsed.type === "file" && /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(parsed.name || ""))) {
+                return { text: parsed.name || "Photo", type: "image", url: parsed.url, size: parsed.size }
+            }
             if (parsed.type === "audio") {
                 return { text: "Voice message", type: "audio", duration: parsed.duration }
             }
@@ -106,6 +109,9 @@ export const StarredList: React.FC<StarredListProps> = ({
                     if (dec) {
                         try {
                             const inner = JSON.parse(dec)
+                            if (inner.type === "image" || (inner.type === "file" && /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(inner.name || ""))) {
+                                return { text: inner.name || "Photo", type: "image", url: inner.url, size: inner.size }
+                            }
                             if (inner.type === "audio") {
                                 return { text: "Voice message", type: "audio", duration: inner.duration }
                             }
@@ -296,7 +302,7 @@ export const StarredList: React.FC<StarredListProps> = ({
                     </div>
                 ) : (
                     filteredList.map((item) => {
-                        const { text, type: msgType } = parseContent(item)
+                        const { text, type: msgType, url: mediaUrl } = parseContent(item) as any
                         const isDirect = item.type === "direct"
 
                         return (
@@ -379,6 +385,25 @@ export const StarredList: React.FC<StarredListProps> = ({
                                         <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400 font-semibold">
                                             <Mic size={14} className="animate-pulse" />
                                             <span>Voice Message</span>
+                                        </div>
+                                    ) : msgType === "image" ? (
+                                        <div className="flex items-center gap-2.5">
+                                            {mediaUrl ? (
+                                                <div className="h-10 w-10 rounded-lg overflow-hidden shrink-0 border border-slate-200/60 dark:border-slate-700/60 bg-slate-100 dark:bg-slate-800">
+                                                    <img src={mediaUrl} alt={text} className="h-full w-full object-cover" />
+                                                </div>
+                                            ) : (
+                                                <div className="h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
+                                                    <ImageIcon size={16} />
+                                                </div>
+                                            )}
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium truncate">
+                                                    <ImageIcon size={13} className="shrink-0" />
+                                                    <span className="truncate">{text || "Photo"}</span>
+                                                </div>
+                                                <span className="text-[10px] text-slate-400">Photo attachment</span>
+                                            </div>
                                         </div>
                                     ) : msgType === "file" ? (
                                         <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-medium truncate">

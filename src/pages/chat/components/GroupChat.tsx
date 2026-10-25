@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react"
 import { 
     Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, 
     Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, 
-    Copy, Send, ChevronLeft, X, Lock, Loader2, Video, Phone, Search, 
-    Smile, Mic, Plus, Star 
+    Copy, ChevronLeft, X, Lock, Loader2, Video, Phone, Search, 
+    Smile, Star, ChevronUp, ChevronDown 
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
@@ -32,6 +32,9 @@ import {
 import DocumentCard from "@/pages/chat/components/media/DocumentCard"
 import AudioPlayerBubble from "@/pages/chat/components/media/AudioPlayerBubble"
 import AudioRecorderBar from "@/pages/chat/components/media/AudioRecorderBar"
+import ImageBubble from "@/pages/chat/components/media/ImageBubble"
+import RichTextRenderer from "@/pages/chat/components/RichTextRenderer"
+import RichMessageInput from "@/pages/chat/components/input/RichMessageInput"
 
 interface Props {
     group: IGroup
@@ -154,16 +157,18 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
 
     const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null)
     const [moreEmojiMsgId, setMoreEmojiMsgId] = useState<number | null>(null)
-    const [showInputEmojiPicker, setShowInputEmojiPicker] = useState(false)
+
+    // Chat search state
+    const [isSearchOpen, setIsSearchOpen] = useState(false)
+    const [searchQuery, setSearchQuery] = useState("")
+    const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
+    const searchInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         const handleDocumentClick = (e: MouseEvent) => {
             const target = e.target as HTMLElement
             if (!target.closest('.emoji-picker-container') && !target.closest('.epr-main')) {
                 setMoreEmojiMsgId(null)
-            }
-            if (!target.closest('.input-emoji-picker-container') && !target.closest('.input-emoji-btn') && !target.closest('.epr-main')) {
-                setShowInputEmojiPicker(false)
             }
         }
         document.addEventListener("mousedown", handleDocumentClick)
@@ -219,7 +224,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     // Media and voice note state
     const [isRecordingAudio, setIsRecordingAudio] = useState(false)
     const [isUploadingMedia, setIsUploadingMedia] = useState(false)
-    const fileInputRef = useRef<HTMLInputElement | null>(null)
+    const [uploadingFile, setUploadingFile] = useState<{ name: string; size?: number; type?: string } | null>(null)
 
     // ── initial load ────────────────────────────────────
     const { data: messagesData, isFetching, isSuccess } = useGetApi<{ messages: IGroupMessage[], hasMore: boolean }>(
@@ -376,6 +381,71 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         decryptCache.current.set(cacheKey, decrypted)
         return decrypted
     }, [groupDetail?.members, myKeys, authUser?.id])
+
+    // ── search within group conversation ─────────────────────────────────
+    const matchingMessageIds = useMemo(() => {
+        if (!searchQuery.trim()) return []
+        const q = searchQuery.toLowerCase().trim()
+        const ids: number[] = []
+        for (const m of messages) {
+            const content = decryptMessage(m)
+            if (!content) continue
+            let textToSearch = content
+            try {
+                if (content.startsWith('{"type":')) {
+                    const parsed = JSON.parse(content)
+                    textToSearch = parsed.name || parsed.caption || content
+                }
+            } catch {}
+            if (textToSearch.toLowerCase().includes(q)) {
+                ids.push(m.id)
+            }
+        }
+        return ids
+    }, [messages, searchQuery, decryptMessage])
+
+    useEffect(() => {
+        if (isSearchOpen) {
+            setTimeout(() => searchInputRef.current?.focus(), 60)
+        } else {
+            setSearchQuery("")
+            setCurrentMatchIndex(0)
+        }
+    }, [isSearchOpen])
+
+    useEffect(() => {
+        if (matchingMessageIds.length > 0) {
+            setCurrentMatchIndex(matchingMessageIds.length - 1)
+        } else {
+            setCurrentMatchIndex(0)
+        }
+    }, [matchingMessageIds.length, searchQuery])
+
+    useEffect(() => {
+        if (isSearchOpen && matchingMessageIds.length > 0 && currentMatchIndex >= 0 && currentMatchIndex < matchingMessageIds.length) {
+            const targetId = matchingMessageIds[currentMatchIndex]
+            const el = document.getElementById(`group-msg-${targetId}`)
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" })
+            }
+        }
+    }, [isSearchOpen, currentMatchIndex, matchingMessageIds])
+
+    const goToNextMatch = () => {
+        if (matchingMessageIds.length <= 1) return
+        setCurrentMatchIndex((prev) => (prev + 1) % matchingMessageIds.length)
+    }
+
+    const goToPrevMatch = () => {
+        if (matchingMessageIds.length <= 1) return
+        setCurrentMatchIndex((prev) => (prev - 1 + matchingMessageIds.length) % matchingMessageIds.length)
+    }
+
+    const closeSearch = () => {
+        setIsSearchOpen(false)
+        setSearchQuery("")
+        setCurrentMatchIndex(0)
+    }
 
     // ── sync state when messagesData arrives/updates ─────
     useEffect(() => {
@@ -595,13 +665,44 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         }
     }
 
-    // ── send file attachment ───────────────────────────────────────────────
-    const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
+    // ── send photo attachment (direct preview like WhatsApp) ───────────────
+    const handleSendPhoto = async (file: File) => {
         if (!file) return
-        e.target.value = ""
-
         setIsUploadingMedia(true)
+        setUploadingFile({ name: file.name, size: file.size, type: file.type })
+        try {
+            const formData = new FormData()
+            formData.append("file", file)
+
+            const response = await axiosInstance.post("/upload/media", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            })
+
+            const mediaData = response.data?.data
+            if (mediaData?.url) {
+                const payload = JSON.stringify({
+                    type: "image",
+                    url: mediaData.url,
+                    name: mediaData.name || file.name,
+                    size: mediaData.size || file.size,
+                })
+                sendGroupEncryptedMessage(payload)
+            }
+        } catch (err: any) {
+            console.error("Photo upload failed:", err)
+            const msg = err.response?.data?.message || "Failed to upload photo"
+            alert(msg)
+        } finally {
+            setIsUploadingMedia(false)
+            setUploadingFile(null)
+        }
+    }
+
+    // ── send document / PDF (direct download) ───────────────────────────────
+    const handleSendPdf = async (file: File) => {
+        if (!file) return
+        setIsUploadingMedia(true)
+        setUploadingFile({ name: file.name, size: file.size, type: file.type })
         try {
             const formData = new FormData()
             formData.append("file", file)
@@ -620,10 +721,13 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                 })
                 sendGroupEncryptedMessage(payload)
             }
-        } catch (err) {
-            console.error("File upload failed:", err)
+        } catch (err: any) {
+            console.error("PDF upload failed:", err)
+            const msg = err.response?.data?.message || "Failed to upload document"
+            alert(msg)
         } finally {
             setIsUploadingMedia(false)
+            setUploadingFile(null)
         }
     }
 
@@ -736,42 +840,44 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/70 dark:bg-[#0b1120]">
 
             {/* header matching mockup */}
-            <div className="h-16 flex-shrink-0 flex items-center justify-between border-b border-slate-200/90 dark:border-slate-800/80 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md px-4 sm:px-6 shadow-xs z-10">
-                <div className="flex items-center gap-3">
+            <div className="h-16 flex-shrink-0 flex items-center justify-between border-b border-slate-200/90 dark:border-slate-800/80 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md px-3 sm:px-6 shadow-xs z-10">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-2">
                     {onBack && (
                         <Button 
                             variant="ghost" 
                             size="icon" 
                             onClick={onBack} 
-                            className="mr-1 lg:hidden rounded-full text-slate-600 dark:text-slate-300"
+                            className="mr-0.5 sm:mr-1 lg:hidden rounded-full text-slate-600 dark:text-slate-300 flex-shrink-0"
+                            aria-label="Back"
                         >
                             <ChevronLeft size={22} />
                         </Button>
                     )}
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold shadow-xs overflow-hidden">
+                    <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold shadow-xs overflow-hidden flex-shrink-0">
                         {group.avatar
                             ? <img src={group.avatar} className="h-full w-full object-cover" />
                             : <Users size={18} />
                         }
                     </div>
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                             <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{liveGroup.name}</p>
-                            <div className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-tight">
+                            <div className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-tight flex-shrink-0">
                                 <Lock size={8} strokeWidth={3} /> E2EE
                             </div>
                         </div>
-                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
                             {memberCount} member{memberCount !== 1 ? "s" : ""}
                         </p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
                     <button
                         type="button"
                         className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                         title="Start group video call"
+                        aria-label="Start group video call"
                     >
                         <Video size={18} />
                     </button>
@@ -779,13 +885,20 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                         type="button"
                         className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                         title="Start group voice call"
+                        aria-label="Start group voice call"
                     >
                         <Phone size={18} />
                     </button>
                     <button
                         type="button"
-                        className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        onClick={() => setIsSearchOpen((prev) => !prev)}
+                        className={`p-2 rounded-full transition-colors ${
+                            isSearchOpen 
+                                ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 ring-1 ring-purple-500/30" 
+                                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
                         title="Search in group"
+                        aria-label="Search in group"
                     >
                         <Search size={18} />
                     </button>
@@ -798,16 +911,18 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                 : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
                         }`}
                         title="Group info"
+                        aria-label="Group info"
                     >
                         <Info size={18} />
                     </button>
                     {onClose && (
-                        <div className="border-l border-slate-200 dark:border-slate-800 ml-1 pl-1">
+                        <div className="hidden sm:block border-l border-slate-200 dark:border-slate-800 ml-1 pl-1">
                             <button
                                 type="button"
                                 onClick={onClose} 
                                 className="p-2 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                 title="Close chat"
+                                aria-label="Close chat"
                             >
                                 <X size={18} />
                             </button>
@@ -815,6 +930,80 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                     )}
                 </div>
             </div>
+
+            {/* Workable search banner */}
+            {isSearchOpen && (
+                <div className="flex items-center gap-2 px-3 sm:px-6 py-2 bg-white/95 dark:bg-[#111827]/95 border-b border-slate-200/90 dark:border-slate-800/80 backdrop-blur-md z-15 shadow-2xs animate-in slide-in-from-top-2 duration-150">
+                    <div className="relative flex-1 flex items-center">
+                        <Search size={15} className="absolute left-3 text-slate-400 dark:text-slate-500 pointer-events-none" />
+                        <input
+                            ref={searchInputRef}
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    e.preventDefault()
+                                    if (e.shiftKey) goToPrevMatch()
+                                    else goToNextMatch()
+                                } else if (e.key === "Escape") {
+                                    closeSearch()
+                                }
+                            }}
+                            placeholder="Search in group..."
+                            className="w-full pl-9 pr-8 py-1.5 text-xs sm:text-sm bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-purple-500 focus:bg-white dark:focus:bg-slate-800 transition-all"
+                        />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery("")}
+                                className="absolute right-2.5 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
+                        {searchQuery.trim() ? (
+                            matchingMessageIds.length > 0 ? (
+                                <>
+                                    <span className="font-semibold text-purple-600 dark:text-purple-400 tabular-nums px-1 text-[11px] sm:text-xs">
+                                        {currentMatchIndex + 1} of {matchingMessageIds.length}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={goToPrevMatch}
+                                        className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
+                                        title="Previous match (Shift+Enter)"
+                                    >
+                                        <ChevronUp size={16} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={goToNextMatch}
+                                        className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
+                                        title="Next match (Enter)"
+                                    >
+                                        <ChevronDown size={16} />
+                                    </button>
+                                </>
+                            ) : (
+                                <span className="text-slate-400 italic text-[11px] sm:text-xs px-1">No matches</span>
+                            )
+                        ) : null}
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={closeSearch}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
+                        title="Close search (Esc)"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
 
             {/* messages area */}
             <div 
@@ -876,7 +1065,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
 
                             // Check if decrypted content is a rich media payload
                             let richPayload: {
-                                type: "file" | "audio"
+                                type: "file" | "audio" | "image"
                                 url: string
                                 name?: string
                                 size?: number
@@ -885,27 +1074,45 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                             try {
                                 if (
                                     decryptedContent.startsWith('{"type":"file"') ||
-                                    decryptedContent.startsWith('{"type":"audio"')
+                                    decryptedContent.startsWith('{"type":"audio"') ||
+                                    decryptedContent.startsWith('{"type":"image"')
                                 ) {
                                     richPayload = JSON.parse(decryptedContent)
                                 }
                             } catch {}
 
+                            const isImage = richPayload?.type === "image" || (
+                                richPayload?.type === "file" &&
+                                /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(richPayload?.name || "")
+                            )
+                            const isAudio = richPayload?.type === "audio"
+                            const isDoc = richPayload?.type === "file" && !isImage
+                            const isMedia = isImage || isAudio || isDoc
+
                             const shouldAnimate = isInitialScrollDone.current && (msg.is_pending || msg.id < 0)
                             const msgAggReactions = getAggregatedReactions(msg.reactions, authUser?.id || 0)
                             const isHovered = hoveredMsgId === msg.id || moreEmojiMsgId === msg.id
                             const isStarred = msg.starred?.some(s => Number(s.user_id) === Number(authUser?.id)) ?? false
+                            const isCurrentSearchMatch = isSearchOpen && matchingMessageIds.length > 0 && matchingMessageIds[currentMatchIndex] === msg.id
+                            const isSearchMatch = isSearchOpen && matchingMessageIds.includes(msg.id)
 
                             return (
                                 <div
                                     key={msg.id}
+                                    id={`group-msg-${msg.id}`}
                                     onMouseEnter={() => setHoveredMsgId(msg.id)}
                                     onMouseLeave={() => {
                                         if (moreEmojiMsgId !== msg.id) {
                                             setHoveredMsgId(null)
                                         }
                                     }}
-                                    className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 ${
+                                    className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 transition-all duration-200 rounded-2xl p-1 -m-1 ${
+                                        isCurrentSearchMatch
+                                            ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] scale-[1.01]"
+                                            : isSearchMatch
+                                                ? "bg-purple-500/5 ring-1 ring-purple-400/40"
+                                                : ""
+                                    } ${
                                         msgAggReactions.length > 0 ? "mb-3.5" : ""
                                     } ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
                                 >
@@ -962,18 +1169,22 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                                     <span className="text-[10px] font-bold leading-none -ml-0.5">+</span>
                                                 </button>
 
-                                                <div className="h-3 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        handleCopyText(msg.id, decryptedContent)
-                                                    }}
-                                                    className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors"
-                                                    title="Copy text"
-                                                >
-                                                    {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                                                </button>
+                                                {!isMedia && (
+                                                    <>
+                                                        <div className="h-3 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleCopyText(msg.id, decryptedContent)
+                                                            }}
+                                                            className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors"
+                                                            title="Copy text"
+                                                        >
+                                                            {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                                                        </button>
+                                                    </>
+                                                )}
 
                                                 {/* Star message button */}
                                                 <button
@@ -1021,20 +1232,30 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
 
                                         {/* bubble & docked attached reaction badge */}
                                         <div className="relative inline-block">
-                                            {richPayload?.type === "file" ? (
-                                                <DocumentCard
-                                                    url={richPayload.url}
-                                                    name={richPayload.name || "Attachment"}
-                                                    size={richPayload.size}
+                                            {isImage ? (
+                                                <ImageBubble
+                                                    url={richPayload!.url}
+                                                    name={richPayload?.name || "Photo"}
+                                                    size={richPayload?.size}
                                                     isMine={isMine}
                                                     createdAt={msg.created_at || new Date().toISOString()}
                                                     isPending={msg.id < 0 || msg.is_pending}
                                                     isStarred={isStarred}
                                                 />
-                                            ) : richPayload?.type === "audio" ? (
+                                            ) : isAudio ? (
                                                 <AudioPlayerBubble
-                                                    url={richPayload.url}
-                                                    duration={richPayload.duration}
+                                                    url={richPayload!.url}
+                                                    duration={richPayload?.duration}
+                                                    isMine={isMine}
+                                                    createdAt={msg.created_at || new Date().toISOString()}
+                                                    isPending={msg.id < 0 || msg.is_pending}
+                                                    isStarred={isStarred}
+                                                />
+                                            ) : isDoc ? (
+                                                <DocumentCard
+                                                    url={richPayload!.url}
+                                                    name={richPayload?.name || "Attachment"}
+                                                    size={richPayload?.size}
                                                     isMine={isMine}
                                                     createdAt={msg.created_at || new Date().toISOString()}
                                                     isPending={msg.id < 0 || msg.is_pending}
@@ -1046,7 +1267,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                                         ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
                                                         : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
                                                 }`}>
-                                                    <p className="whitespace-pre-wrap leading-relaxed">{decryptedContent}</p>
+                                                    <RichTextRenderer content={decryptedContent} isMine={isMine} />
                                                     <div className={`text-[10px] tabular-nums mt-1 flex items-center justify-end gap-1 ${
                                                         isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
                                                     }`}>
@@ -1126,30 +1347,6 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                     </div>
                 ) : (
                     <div className="relative flex items-center gap-2 max-w-4xl mx-auto">
-                        {/* Input Emoji Picker Popover */}
-                        {showInputEmojiPicker && (
-                            <div className="absolute bottom-full mb-3 right-0 sm:right-14 z-50 shadow-2xl rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 input-emoji-picker-container animate-in fade-in zoom-in-95 duration-150">
-                                <EmojiPicker
-                                    theme={document.documentElement.classList.contains("dark") ? Theme.DARK : Theme.LIGHT}
-                                    onEmojiClick={(emojiData: EmojiClickData) => {
-                                        handleTyping(input + emojiData.emoji)
-                                    }}
-                                    lazyLoadEmojis={true}
-                                    searchPlaceHolder="Search emoji..."
-                                    width={320}
-                                    height={400}
-                                />
-                            </div>
-                        )}
-
-                        {/* Hidden file input for documents/attachments */}
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            onChange={handleFileSelected}
-                            className="hidden"
-                        />
-
                         {isRecordingAudio ? (
                             <AudioRecorderBar
                                 onSendAudio={handleSendAudioNote}
@@ -1157,73 +1354,17 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                 isUploading={isUploadingMedia}
                             />
                         ) : (
-                            <>
-                                <button
-                                    type="button"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={isUploadingMedia}
-                                    className="h-11 w-11 shrink-0 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
-                                    title="Add document or attachment"
-                                >
-                                    {isUploadingMedia ? (
-                                        <Loader2 size={18} className="animate-spin text-purple-600" />
-                                    ) : (
-                                        <Plus size={20} />
-                                    )}
-                                </button>
-
-                                <div className="flex-1 flex items-center bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/60 rounded-full px-4 h-11 focus-within:ring-2 focus-within:ring-purple-500/50 focus-within:border-purple-500 transition-all">
-                                    <input
-                                        value={input}
-                                        onChange={(e) => handleTyping(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter" && !e.shiftKey) {
-                                                e.preventDefault()
-                                                setShowInputEmojiPicker(false)
-                                                handleSend()
-                                            }
-                                        }}
-                                        placeholder={`Message ${liveGroup.name}...`}
-                                        className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
-                                    />
-                                    
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowInputEmojiPicker(prev => !prev)}
-                                        className={`p-1.5 input-emoji-btn transition-colors cursor-pointer ${
-                                            showInputEmojiPicker 
-                                                ? "text-purple-600 dark:text-purple-400" 
-                                                : "text-slate-400 hover:text-purple-600 dark:hover:text-purple-400"
-                                        }`}
-                                        title="Add emoji"
-                                    >
-                                        <Smile size={20} />
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsRecordingAudio(true)}
-                                        disabled={isUploadingMedia}
-                                        className="p-1.5 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors cursor-pointer disabled:opacity-40"
-                                        title="Record voice message"
-                                    >
-                                        <Mic size={20} />
-                                    </button>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowInputEmojiPicker(false)
-                                        handleSend()
-                                    }}
-                                    disabled={!input.trim()}
-                                    className="h-11 w-11 shrink-0 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white flex items-center justify-center shadow-lg shadow-purple-600/30 transition-transform active:scale-95 cursor-pointer disabled:cursor-not-allowed"
-                                    title="Send message"
-                                >
-                                    <Send size={18} />
-                                </button>
-                            </>
+                            <RichMessageInput
+                                placeholder={`Message ${liveGroup.name}...`}
+                                value={input}
+                                onChange={handleTyping}
+                                onSend={handleSend}
+                                onSendPhoto={handleSendPhoto}
+                                onSendPdf={handleSendPdf}
+                                onStartVoiceRecording={() => setIsRecordingAudio(true)}
+                                isUploading={isUploadingMedia}
+                                uploadingFile={uploadingFile}
+                            />
                         )}
                     </div>
                 )}
