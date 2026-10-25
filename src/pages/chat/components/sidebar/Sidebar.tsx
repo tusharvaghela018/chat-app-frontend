@@ -304,11 +304,10 @@ const Sidebar = ({
                         <button
                             type="button"
                             onClick={onCreateGroup}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 transition-all cursor-pointer"
+                            className="h-8 w-8 rounded-full bg-purple-100 hover:bg-purple-200 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-300 flex items-center justify-center transition-all cursor-pointer"
                             title="Create New Group"
                         >
-                            <Plus size={14} className="stroke-[2.5]" />
-                            <span>New</span>
+                            <Plus size={16} className="stroke-[2.5]" />
                         </button>
                     )}
                 </div>
@@ -323,7 +322,7 @@ const Sidebar = ({
                         <input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search conversations..."
+                            placeholder={navTab === "groups" ? "Search groups..." : "Search conversations..."}
                             className="w-full pl-10 pr-12 py-2 text-xs bg-slate-100 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 rounded-xl outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all duration-200 placeholder:text-slate-400 text-slate-900 dark:text-slate-100"
                         />
                         <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded-md pointer-events-none shadow-2xs">

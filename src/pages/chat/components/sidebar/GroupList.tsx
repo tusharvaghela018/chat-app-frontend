@@ -160,10 +160,27 @@ const GroupList = ({ selectedGroupId, onSelectGroup, externalSearch }: Props) =>
                                     </div>
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{group.name}</p>
-                                    <p className="text-[11px] font-normal text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                                        {group.description ?? "No description provided"}
-                                    </p>
+                                    <div className="flex items-center justify-between gap-1">
+                                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{group.name}</p>
+                                        {(group as any).last_message?.created_at && (
+                                            <span className="text-[10px] text-slate-400 font-medium shrink-0">
+                                                {new Date((group as any).last_message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                                        <p className="text-[11px] font-normal text-slate-500 dark:text-slate-400 truncate flex-1">
+                                            {(group as any).last_message?.sender?.name
+                                                ? `${(group as any).last_message.sender.name}: ${(group as any).last_message.content}`
+                                                : (group.description ?? "No description provided")
+                                            }
+                                        </p>
+                                        {(group as any).unread_count ? (
+                                            <span className="h-4 min-w-4 px-1 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                                                {(group as any).unread_count}
+                                            </span>
+                                        ) : null}
+                                    </div>
                                 </div>
                             </div>
                         )

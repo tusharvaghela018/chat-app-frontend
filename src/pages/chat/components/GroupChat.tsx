@@ -873,6 +873,25 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                 </div>
 
                 <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+                    {/* End-to-end encrypted pill matching mockup */}
+                    <div className="hidden md:flex items-center gap-1.5 px-3 py-1 mr-1 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 text-xs font-medium border border-slate-200/80 dark:border-slate-700/60">
+                        <Lock size={12} className="text-slate-600 dark:text-slate-400" />
+                        <span>End-to-end encrypted</span>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setIsSearchOpen((prev) => !prev)}
+                        className={`p-2 rounded-full transition-colors ${
+                            isSearchOpen 
+                                ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 ring-1 ring-purple-500/30" 
+                                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                        title="Search in group"
+                        aria-label="Search in group"
+                    >
+                        <Search size={18} />
+                    </button>
                     <button
                         type="button"
                         className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -891,29 +910,16 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                     </button>
                     <button
                         type="button"
-                        onClick={() => setIsSearchOpen((prev) => !prev)}
-                        className={`p-2 rounded-full transition-colors ${
-                            isSearchOpen 
-                                ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 ring-1 ring-purple-500/30" 
-                                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
-                        }`}
-                        title="Search in group"
-                        aria-label="Search in group"
-                    >
-                        <Search size={18} />
-                    </button>
-                    <button
-                        type="button"
                         onClick={() => setShowInfo((prev) => !prev)}
                         className={`p-2 rounded-full transition-colors ${
                             showInfo 
                                 ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300" 
                                 : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
                         }`}
-                        title="Group info"
-                        aria-label="Group info"
+                        title="Group info & options"
+                        aria-label="Group info & options"
                     >
-                        <Info size={18} />
+                        <MoreVertical size={18} />
                     </button>
                     {onClose && (
                         <div className="hidden sm:block border-l border-slate-200 dark:border-slate-800 ml-1 pl-1">
@@ -1018,15 +1024,17 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                     </div>
                 )}
 
-                {/* E2EE padlock banner at top of messages */}
-                <div className="flex flex-col items-center justify-center p-3.5 sm:p-4 my-2 mb-4 rounded-2xl bg-white/90 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-center max-w-sm mx-auto shadow-xs">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1">
-                        <Lock size={13} className="text-purple-600 dark:text-purple-400" />
-                        <span>End-to-end encrypted</span>
+                {/* E2EE banner at top of messages matching mockup */}
+                <div className="flex items-center justify-center gap-3 p-3 px-5 my-2 mb-4 rounded-xl bg-slate-100/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-center max-w-lg mx-auto shadow-2xs">
+                    <Lock size={15} className="text-slate-700 dark:text-slate-300 shrink-0" />
+                    <div className="text-left sm:text-center">
+                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                            Messages are secured with end-to-end encryption.
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Only members of this group can read these messages.
+                        </p>
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Messages and calls in this group are protected with end-to-end encryption.
-                    </p>
                 </div>
 
                 {(isFetching && messages.length === 0) ? (
@@ -1053,8 +1061,16 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                             if (isSystem) {
                                 return (
                                     <div key={msg.id} className="flex justify-center my-2 animate-in fade-in duration-300">
-                                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-slate-800/80 px-4 py-1 rounded-full border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
+                                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-slate-800/80 px-4 py-1 rounded-full border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex items-center gap-1.5">
+                                            {msg.content.toLowerCase().includes("join") ? (
+                                                <Users size={12} className="text-slate-400" />
+                                            ) : (
+                                                <UserMinus size={12} className="text-slate-400" />
+                                            )}
                                             {msg.content}
+                                            <span className="text-[10px] text-slate-400 font-normal ml-1">
+                                                {formatTime(msg.created_at)}
+                                            </span>
                                         </span>
                                     </div>
                                 )
