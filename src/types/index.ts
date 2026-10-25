@@ -5,6 +5,8 @@ export interface IUser {
     avatar?: string
     is_online?: boolean
     last_seen?: string
+    last_seen_privacy?: "everyone" | "contacts" | "nobody"
+    avatar_privacy?: "everyone" | "contacts" | "nobody"
     email?: string
     public_key?: string
     encrypted_vault?: string

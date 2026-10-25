@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { ShieldCheck, ArrowLeft, KeyRound } from "lucide-react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { ShieldCheck, ArrowLeft, KeyRound, Clock, Loader2, Sparkles, Smartphone, LifeBuoy } from "lucide-react";
 import { useDispatch } from "react-redux";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -9,7 +9,6 @@ import * as yup from "yup";
 import { usePostApi } from "@/hooks/api";
 import { setUser } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
-import Button from "@/common/Button";
 import Input from "@/common/Input";
 
 interface Verify2FAForm {
@@ -30,6 +29,7 @@ const Verify2FA = () => {
             .string()
             .required("Verification code is required")
             .test("len", (val) => {
+                if (!val) return false;
                 if (isRecoveryMode) return val.length === 8 || val.length === 10;
                 return val.length === 6;
             })
@@ -114,40 +114,57 @@ const Verify2FA = () => {
     };
 
     return (
-        <div className="min-h-screen bg-background flex items-center justify-center px-4">
-            <div className="w-full max-w-md">
-                <div className="bg-card rounded-2xl shadow-sm border border-border p-8">
+        <div className="min-h-screen bg-slate-50 dark:bg-[#090b16] text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 relative overflow-hidden transition-colors">
+            {/* Ambient Background Glows */}
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-purple-500/15 dark:bg-purple-600/20 rounded-full blur-[140px] pointer-events-none" />
+            <div className="absolute bottom-10 right-10 w-96 h-96 bg-indigo-500/10 dark:bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
 
-                    {/* Header */}
-                    <div className="mb-8 text-center">
-                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary mb-4">
-                            <ShieldCheck size={24} />
-                        </div>
-                        <h1 className="text-2xl font-semibold text-foreground">Two-Step Verification</h1>
-                        <p className="text-sm text-muted-foreground mt-2 px-4">
-                            {isRecoveryMode
-                                ? "Enter one of your 8-character recovery codes to access your account."
-                                : "Enter the 6-digit code from your authenticator app to continue."
-                            }
-                        </p>
-
-                        {timeLeft !== null && (
-                            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-xs font-medium">
-                                <span className={`w-2 h-2 rounded-full animate-pulse ${timeLeft < 60 ? "bg-destructive" : "bg-primary"}`} />
-                                Session expires in: <span className={`font-bold ${timeLeft < 60 ? "text-destructive" : "text-foreground"}`}>{formatTime(timeLeft)}</span>
-                            </div>
-                        )}
+            <div className="w-full max-w-md relative z-10 space-y-6">
+                
+                {/* Brand & Hero Header */}
+                <div className="text-center space-y-2">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-xl shadow-purple-600/30 mb-2">
+                        {isRecoveryMode ? <LifeBuoy size={26} /> : <ShieldCheck size={26} className="stroke-[2.2]" />}
                     </div>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-100/90 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/40 text-[11px] font-bold">
+                        <Sparkles size={11} className="text-purple-600 dark:text-purple-400" />
+                        <span>Security Challenge</span>
+                    </div>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                        {isRecoveryMode ? "Account Recovery" : "Two-Step Verification"}
+                    </h1>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-xs mx-auto leading-relaxed">
+                        {isRecoveryMode
+                            ? "Enter one of your 8-character recovery backup codes to unlock your account."
+                            : "Enter the 6-digit code from your authenticator app to complete verification."
+                        }
+                    </p>
 
-                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                        <div className="space-y-4">
+                    {timeLeft !== null && (
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-[11px] font-semibold text-slate-600 dark:text-slate-300 shadow-2xs mt-1">
+                            <Clock size={12} className={timeLeft < 60 ? "text-red-500 animate-pulse" : "text-purple-500"} />
+                            <span>Session expires in:</span>
+                            <span className={`font-mono font-bold ${timeLeft < 60 ? "text-red-500" : "text-purple-600 dark:text-purple-400"}`}>
+                                {formatTime(timeLeft)}
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Glassmorphic Form Card */}
+                <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl p-7 sm:p-9 shadow-xl shadow-purple-500/5 space-y-6">
+                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 ml-0.5">
+                                {isRecoveryMode ? "Emergency Recovery Code" : "6-Digit Authenticator Code"}
+                            </label>
                             <Input
-                                placeholder={isRecoveryMode ? "Recovery Code (e.g. ABCD1234)" : "000000"}
+                                placeholder={isRecoveryMode ? "ABCD1234" : "000000"}
                                 maxLength={isRecoveryMode ? 10 : 6}
                                 register={register("code")}
                                 error={errors.code?.message}
-                                leftIcon={<KeyRound size={18} />}
-                                inputClassName="text-center font-mono text-xl tracking-[0.2em] h-14"
+                                leftIcon={<KeyRound size={16} className="text-slate-400" />}
+                                inputClassName="text-center font-mono text-xl tracking-[0.25em] h-13 sm:h-14 !bg-slate-50 dark:!bg-slate-950/60 !border-slate-200 dark:!border-slate-800 focus:!border-purple-500 focus:!ring-purple-500/20 rounded-2xl font-bold"
                                 onChange={(e) => {
                                     const val = e.target.value.toUpperCase();
                                     setValue("code", val);
@@ -157,31 +174,52 @@ const Verify2FA = () => {
                             />
                         </div>
 
-                        <Button
+                        <button
                             type="submit"
-                            fullWidth
                             disabled={isPending}
-                            loading={isPending}
+                            className="w-full py-3.5 px-6 rounded-full text-xs sm:text-sm font-bold text-white shadow-lg shadow-purple-600/25 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 hover:shadow-purple-600/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            Verify & Login
-                        </Button>
+                            {isPending ? (
+                                <>
+                                    <Loader2 size={16} className="animate-spin" />
+                                    <span>Verifying Code...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <ShieldCheck size={16} />
+                                    <span>Verify & Continue</span>
+                                </>
+                            )}
+                        </button>
                     </form>
 
-                    <div className="mt-8 pt-6 border-t border-border flex flex-col gap-3">
+                    {/* Mode Switch & Back Button */}
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-col items-center gap-3">
                         <button
+                            type="button"
                             onClick={toggleMode}
-                            className="text-sm font-medium text-primary hover:underline transition-all"
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors cursor-pointer"
                         >
-                            {isRecoveryMode ? "Use authenticator app instead" : "Lost access to your phone?"}
+                            {isRecoveryMode ? (
+                                <>
+                                    <Smartphone size={13} />
+                                    <span>Use authenticator app instead</span>
+                                </>
+                            ) : (
+                                <>
+                                    <LifeBuoy size={13} />
+                                    <span>Lost access to your authenticator?</span>
+                                </>
+                            )}
                         </button>
 
-                        <button
-                            onClick={() => navigate(ROUTES.LOGIN.path)}
-                            className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-all"
+                        <Link
+                            to={ROUTES.LOGIN.path}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
                         >
-                            <ArrowLeft size={14} />
-                            Back to login
-                        </button>
+                            <ArrowLeft size={13} />
+                            <span>Return to login</span>
+                        </Link>
                     </div>
                 </div>
             </div>

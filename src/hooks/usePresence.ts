@@ -64,6 +64,8 @@ export const usePresence = () => {
                 globalOnlineUsers.delete(data.userId)
                 if (data.lastSeen) {
                     globalLastSeenMap.set(data.userId, data.lastSeen)
+                } else {
+                    globalLastSeenMap.delete(data.userId)
                 }
             }
             notifySubscribers()
@@ -78,13 +80,15 @@ export const usePresence = () => {
         }
     }, [socket])
 
-    const isUserOnline = (userId: number, initialOnline?: boolean) => {
+    const isUserOnline = (userId: number, initialOnline?: boolean, privacy?: string) => {
+        if (privacy === "nobody") return false
         if (globalOnlineUsers.has(userId)) return true
         if (globalOnlineUsers.size === 0 && initialOnline) return true
         return false
     }
 
-    const getUserLastSeen = (userId: number, fallbackLastSeen?: string) => {
+    const getUserLastSeen = (userId: number, fallbackLastSeen?: string | null, privacy?: string) => {
+        if (privacy === "nobody") return null
         return globalLastSeenMap.get(userId) || fallbackLastSeen || null
     }
 

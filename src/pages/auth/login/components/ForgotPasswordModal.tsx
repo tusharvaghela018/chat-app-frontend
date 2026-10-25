@@ -1,12 +1,11 @@
 import { useForm } from "react-hook-form";
-import { Mail } from "lucide-react";
+import { Mail, KeyRound, Loader2 } from "lucide-react";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import axios from "axios";
 
 import Modal from "@/common/Modal";
 import Input from "@/common/Input";
-import Button from "@/common/Button";
 import { usePostApi } from "@/hooks/api";
 
 interface ForgotPasswordForm {
@@ -57,30 +56,62 @@ const ForgotPasswordModal = ({ open, onClose }: ForgotPasswordModalProps) => {
         forgotPassword(data);
     };
 
+    const handleClose = () => {
+        reset();
+        onClose();
+    };
+
+    const renderFooter = (
+        <div className="flex items-center justify-end gap-3 w-full">
+            <button
+                type="button"
+                onClick={handleClose}
+                disabled={isPending}
+                className="flex-1 sm:flex-initial px-5 sm:px-6 py-2.5 rounded-full border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+                Cancel
+            </button>
+            <button
+                type="submit"
+                form="forgot-password-form"
+                disabled={isPending}
+                className="flex-1 sm:flex-initial px-5 sm:px-6 py-2.5 rounded-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md shadow-purple-600/25 transition-all active:scale-95 cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5"
+            >
+                {isPending ? (
+                    <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Sending...</span>
+                    </>
+                ) : (
+                    <span>Send Reset Link</span>
+                )}
+            </button>
+        </div>
+    );
+
     return (
-        <Modal open={open} onClose={onClose} title="Forgot Password">
-            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-                <p className="text-sm text-muted-foreground">
-                    Enter your email address and we'll send you a link to reset your password.
+        <Modal
+            open={open}
+            onClose={handleClose}
+            title="Forgot password"
+            subtitle="Enter your email to receive recovery instructions."
+            icon={<KeyRound size={20} />}
+            maxWidth="max-w-md"
+            footer={renderFooter}
+        >
+            <form id="forgot-password-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-1">
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                    Enter the email address associated with your account and we'll send you a link to reset your password.
                 </p>
 
                 <Input
-                    label="Email"
+                    label="Email address"
                     type="email"
                     placeholder="you@example.com"
                     leftIcon={<Mail size={16} />}
                     register={register("email")}
                     error={errors.email?.message}
                 />
-
-                <div className="flex justify-end gap-3 mt-4">
-                    <Button type="button" variant="secondary" onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button type="submit" loading={isPending}>
-                        Send Link
-                    </Button>
-                </div>
             </form>
         </Modal>
     );

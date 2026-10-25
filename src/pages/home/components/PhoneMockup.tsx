@@ -5,7 +5,7 @@ export const PhoneMockup: React.FC<{ className?: string }> = ({ className = "" }
     const chats = [
         {
             id: 1,
-            name: "Aarav Patel",
+            name: "Test User 1",
             avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces",
             message: "Hey! Are we still on for the meeti...",
             time: "9:41 AM",
@@ -16,7 +16,7 @@ export const PhoneMockup: React.FC<{ className?: string }> = ({ className = "" }
             id: 2,
             name: "Design Team",
             avatar: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100&h=100&fit=crop",
-            message: "Samantha: Here's the updated UI...",
+            message: "Test User 2: Here's the updated UI...",
             time: "9:20 AM",
             unread: 5,
             online: false
@@ -32,7 +32,7 @@ export const PhoneMockup: React.FC<{ className?: string }> = ({ className = "" }
         },
         {
             id: 4,
-            name: "Sneha Mehta",
+            name: "Test User 3",
             avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=faces",
             message: "🎙 Voice message",
             time: "Yesterday",
@@ -43,14 +43,14 @@ export const PhoneMockup: React.FC<{ className?: string }> = ({ className = "" }
             id: 5,
             name: "College Friends",
             avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&h=100&fit=crop",
-            message: "Rohan: That was amazing! 🎉",
+            message: "Test User 4: That was amazing! 🎉",
             time: "Yesterday",
             unread: 0,
             online: false
         },
         {
             id: 6,
-            name: "Vikram Singh",
+            name: "Test User 5",
             avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=faces",
             message: "Let's catch up this weekend.",
             time: "Mon",

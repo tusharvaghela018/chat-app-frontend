@@ -3,7 +3,7 @@ import { useSelector } from "react-redux"
 import { 
     User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert, 
     Ban, Check, UserMinus, Loader2, Video, Phone, Search, 
-    Smile, CheckCheck, Copy, Archive, ArchiveRestore, Star, MoreVertical, MoreHorizontal,
+    Smile, CheckCheck, Copy, Archive, ArchiveRestore, Star, MoreHorizontal,
     ChevronUp, ChevronDown
 } from "lucide-react"
 import { useGetApi, usePatchApi } from "@/hooks/api"
@@ -46,8 +46,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const queryClient = useQueryClient()
     const { isUserOnline, getUserLastSeen, formatLastActive } = usePresence()
 
-    const isOnline = isUserOnline(user.id, user.is_online)
-    const lastSeen = getUserLastSeen(user.id, user.last_seen)
+    const isOnline = isUserOnline(user.id, user.is_online, user.last_seen_privacy)
+    const lastSeen = getUserLastSeen(user.id, user.last_seen, user.last_seen_privacy)
 
     const [input, setInput] = useState("")
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -738,7 +738,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                     </span>
                                 ) : isTyping ? (
                                     <span className="text-purple-600 dark:text-purple-400 font-semibold animate-pulse">typing...</span>
-                                ) : isOnline ? (
+                                ) : user.last_seen_privacy === "nobody" ? null : isOnline ? (
                                     <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
                                         <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                                         Online

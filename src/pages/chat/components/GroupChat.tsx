@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react"
 import { 
-    Users, Info, UserPlus, UserMinus, MoreVertical, MoreHorizontal, MessageSquare, 
-    Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, 
+    Users, UserPlus, UserMinus, MoreVertical, MoreHorizontal, MessageSquare, 
+    Shield, ShieldOff, LogOut, ChevronRight, Link2, Check, 
     Copy, ChevronLeft, X, Lock, Loader2, Video, Phone, Search, 
     Smile, Star, ChevronUp, ChevronDown, Camera, Pencil, Settings, 
     FileText, Image as ImageIcon 
@@ -803,7 +803,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const { mutate: updateRole, isPending: isUpdatingRole } = usePatchApi(`/groups/${group.id}/members`)
 
     // generate invite link
-    const { mutate: generateInvite, isPending: isGenerating } = usePostApi(
+    const { mutate: generateInvite } = usePostApi(
         `/groups/${group.id}/invite`
     )
 
@@ -1072,7 +1072,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                             )}
                                             {msg.content}
                                             <span className="text-[10px] text-slate-400 font-normal ml-1">
-                                                {formatTime(msg.created_at)}
+                                                {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
                                             </span>
                                         </span>
                                     </div>

@@ -279,7 +279,7 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
 
 const UserAvatar = ({ user, isSelected }: { user: IUser, isSelected: boolean }) => {
     const { isUserOnline } = usePresence()
-    const isOnline = isUserOnline(user.id, user.is_online)
+    const isOnline = isUserOnline(user.id, user.is_online, user.last_seen_privacy)
 
     return (
         <div className="relative flex-shrink-0">

@@ -83,7 +83,7 @@ export const LaptopMockup: React.FC<{ className?: string }> = ({ className = "" 
                                     <span className="font-bold text-slate-100 truncate text-[11px]">Design Team</span>
                                     <span className="text-[9px] text-slate-400">9:28 AM</span>
                                 </div>
-                                <span className="text-[10px] text-slate-400 truncate block">Samantha: Here's t...</span>
+                                <span className="text-[10px] text-slate-400 truncate block">Test User 2: Here's t...</span>
                             </div>
                             <span className="h-3.5 w-3.5 rounded-full bg-indigo-600 text-[8px] font-bold text-white flex items-center justify-center">3</span>
                         </div>
@@ -105,11 +105,11 @@ export const LaptopMockup: React.FC<{ className?: string }> = ({ className = "" 
                             <img
                                 src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop"
                                 className="h-7 w-7 rounded-lg object-cover"
-                                alt="Aarav"
+                                alt="Test User 1"
                             />
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between">
-                                    <span className="font-medium text-slate-200 truncate text-[11px]">Aarav Patel</span>
+                                    <span className="font-medium text-slate-200 truncate text-[11px]">Test User 1</span>
                                     <span className="text-[9px] text-slate-400">9:41 AM</span>
                                 </div>
                                 <span className="text-[10px] text-slate-400 truncate block">Hey! Are we still on...</span>
@@ -144,15 +144,15 @@ export const LaptopMockup: React.FC<{ className?: string }> = ({ className = "" 
 
                     {/* Messages Area */}
                     <div className="flex-1 p-3.5 space-y-3 overflow-y-auto custom-scrollbar">
-                        {/* Samantha's message with attached images */}
+                        {/* Test User 2's message with attached images */}
                         <div className="flex items-start gap-2">
                             <img
                                 src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop"
                                 className="h-6 w-6 rounded-full object-cover mt-0.5"
-                                alt="Samantha"
+                                alt="Test User 2"
                             />
                             <div className="max-w-[80%]">
-                                <span className="text-[10px] font-bold text-purple-400 block mb-0.5">Samantha</span>
+                                <span className="text-[10px] font-bold text-purple-400 block mb-0.5">Test User 2</span>
                                 <div className="p-2.5 rounded-2xl rounded-tl-xs bg-[#162032] border border-slate-700/60 text-slate-100 shadow-xs">
                                     <p className="text-[11.5px] mb-2 leading-relaxed">Here's the updated UI for the home screen. Thoughts?</p>
                                     {/* 3 Attached UI Cards */}
@@ -199,15 +199,15 @@ export const LaptopMockup: React.FC<{ className?: string }> = ({ className = "" 
                             </div>
                         </div>
 
-                        {/* Rohan's Voice Message */}
+                        {/* Test User 4's Voice Message */}
                         <div className="flex items-start gap-2">
                             <img
                                 src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop"
                                 className="h-6 w-6 rounded-full object-cover mt-0.5"
-                                alt="Rohan"
+                                alt="Test User 4"
                             />
                             <div className="max-w-[75%]">
-                                <span className="text-[10px] font-bold text-emerald-400 block mb-0.5">Rohan</span>
+                                <span className="text-[10px] font-bold text-emerald-400 block mb-0.5">Test User 4</span>
                                 <div className="p-2 rounded-2xl rounded-tl-xs bg-[#162032] border border-slate-700/60 flex items-center gap-2">
                                     <button className="h-7 w-7 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
                                         <Play size={12} className="fill-current ml-0.5" />
@@ -228,15 +228,15 @@ export const LaptopMockup: React.FC<{ className?: string }> = ({ className = "" 
                             </div>
                         </div>
 
-                        {/* Priya's Message */}
+                        {/* Test User 6's Message */}
                         <div className="flex items-start gap-2">
                             <img
                                 src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop"
                                 className="h-6 w-6 rounded-full object-cover mt-0.5"
-                                alt="Priya"
+                                alt="Test User 6"
                             />
                             <div className="max-w-[75%]">
-                                <span className="text-[10px] font-bold text-pink-400 block mb-0.5">Priya</span>
+                                <span className="text-[10px] font-bold text-pink-400 block mb-0.5">Test User 6</span>
                                 <div className="px-3 py-1.5 rounded-2xl rounded-tl-xs bg-[#162032] border border-slate-700/60 text-slate-100 flex items-center gap-2">
                                     <span className="text-[11.5px]">I love the new color palette! 👏</span>
                                     <span className="text-[9px] text-slate-400 shrink-0">9:26 AM</span>
@@ -251,7 +251,7 @@ export const LaptopMockup: React.FC<{ className?: string }> = ({ className = "" 
                                 <span className="h-1 w-1 rounded-full bg-indigo-400 animate-pulse delay-100" />
                                 <span className="h-1 w-1 rounded-full bg-indigo-400 animate-pulse delay-200" />
                             </span>
-                            <span>Samantha is typing...</span>
+                            <span>Test User 2 is typing...</span>
                         </div>
                     </div>
 
