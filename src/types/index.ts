@@ -78,6 +78,7 @@ export interface IConversation {
     status: 'pending' | 'accepted' | 'rejected'
     blocked_by_sender: boolean
     blocked_by_receiver: boolean
+    is_archived?: boolean
     created_at: string
     updated_at: string
 }

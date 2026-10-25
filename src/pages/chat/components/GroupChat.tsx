@@ -3,7 +3,7 @@ import {
     Users, Info, UserPlus, UserMinus, MoreVertical, MessageSquare, 
     Shield, ShieldOff, LogOut, Trash2, ChevronRight, Link2, Check, 
     Copy, Send, ChevronLeft, X, Lock, Loader2, Video, Phone, Search, 
-    Smile, Mic, Plus 
+    Smile, Mic, Plus, Star 
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
@@ -18,7 +18,7 @@ import AddMemberModal from "@/pages/chat/components/group/AddMemberModal"
 import GroupSettingsModal from "@/pages/chat/components/group/GroupSettingsModal"
 import EditGroupModal from "@/pages/chat/components/group/EditGroupModal"
 import JoinRequestsModal from "@/pages/chat/components/group/JoinRequestsModal"
-import { useGroupChat, type IGroupMessage, type IGroupMessageReaction } from "@/pages/chat/hooks"
+import { useGroupChat, type IGroupMessage, type IGroupMessageReaction, type IStarredItem } from "@/pages/chat/hooks"
 import { useSocket } from "@/hooks/socket"
 import { 
     encryptGroupPayload, 
@@ -29,6 +29,9 @@ import {
     getSessionKeys, 
     type EncryptedMessage 
 } from "@/utils/crypto"
+import DocumentCard from "@/pages/chat/components/media/DocumentCard"
+import AudioPlayerBubble from "@/pages/chat/components/media/AudioPlayerBubble"
+import AudioRecorderBar from "@/pages/chat/components/media/AudioRecorderBar"
 
 interface Props {
     group: IGroup
@@ -213,6 +216,11 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const [copied, setCopied] = useState(false)
     const [showJoinRequests, setShowJoinRequests] = useState(false)
 
+    // Media and voice note state
+    const [isRecordingAudio, setIsRecordingAudio] = useState(false)
+    const [isUploadingMedia, setIsUploadingMedia] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement | null>(null)
+
     // ── initial load ────────────────────────────────────
     const { data: messagesData, isFetching, isSuccess } = useGetApi<{ messages: IGroupMessage[], hasMore: boolean }>(
         `/groups/${group.id}/messages`,
@@ -234,6 +242,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     } = useGroupChat({
         socket,
         groupId: group.id,
+        currentUserId: authUser?.id,
         initialMessages: initialMsgs,
         onMemberJoined: () => {
             queryClient.invalidateQueries({ queryKey: [`group-${group.id}`] })
@@ -244,6 +253,50 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
         },
     })
+
+    const handleToggleStar = async (groupMessageId: number) => {
+        if (!authUser?.id) return
+
+        // 1. Instant optimistic star update
+        setMessages((prev) =>
+            prev.map((m) => {
+                if (Number(m.id) !== Number(groupMessageId)) return m
+                const current = m.starred || []
+                const isCurrentlyStarred = current.some((s) => Number(s.user_id) === Number(authUser.id))
+                let nextStarred: IStarredItem[]
+                if (isCurrentlyStarred) {
+                    nextStarred = current.filter((s) => Number(s.user_id) !== Number(authUser.id))
+                } else {
+                    nextStarred = [...current, { user_id: Number(authUser.id), group_message_id: Number(groupMessageId) }]
+                }
+                return { ...m, starred: nextStarred }
+            })
+        )
+
+        try {
+            const res = await axiosInstance.post("/starred-messages/toggle", { groupMessageId })
+            const serverStarred = res.data?.data?.isStarred
+            if (typeof serverStarred === "boolean") {
+                setMessages((prev) =>
+                    prev.map((m) => {
+                        if (Number(m.id) !== Number(groupMessageId)) return m
+                        const current = (m.starred || []).filter((s) => Number(s.user_id) !== Number(authUser.id))
+                        return {
+                            ...m,
+                            starred: serverStarred
+                                ? [...current, { user_id: Number(authUser.id), group_message_id: Number(groupMessageId) }]
+                                : current,
+                        }
+                    })
+                )
+            }
+            queryClient.invalidateQueries({ queryKey: ["starred-messages"] })
+            queryClient.invalidateQueries({ queryKey: ["starred-messages-ids"] })
+            queryClient.invalidateQueries({ queryKey: [`group-messages-${group.id}`] })
+        } catch (err) {
+            console.error("Failed to toggle group star:", err)
+        }
+    }
 
     const handleToggleReaction = (groupMessageId: number, emoji: string) => {
         if (!authUser?.id) return
@@ -454,16 +507,9 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         }, 2000)
     }
 
-    // ── send ──────────────────────────────────────────────────────────────
-    const handleSend = () => {
-        if (!input.trim()) return
-
-        const text = input.trim()
-        setInput("")
-        emitTypingStop()
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-
-        let finalContent = text
+    // ── send encrypted payload helper ────────────────────────────────────
+    const sendGroupEncryptedMessage = (rawContent: string) => {
+        let finalContent = rawContent
         let encryptedKeys: Record<number, EncryptedMessage> = {}
 
         const membersWithPK = groupDetail?.members?.filter(m => !!m.user?.public_key)
@@ -473,7 +519,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             const groupKey = generateGroupKey()
 
             // 2. Encrypt Payload
-            const encryptedPayload = encryptGroupPayload(text, groupKey)
+            const encryptedPayload = encryptGroupPayload(rawContent, groupKey)
             finalContent = JSON.stringify(encryptedPayload)
 
             // 3. Encrypt Group Key for each member
@@ -505,6 +551,80 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         }
 
         sendMessage(finalContent, encryptedKeys, optimisticMsg)
+    }
+
+    // ── send text message ──────────────────────────────────────────────────
+    const handleSend = () => {
+        if (!input.trim()) return
+
+        const text = input.trim()
+        setInput("")
+        emitTypingStop()
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+
+        sendGroupEncryptedMessage(text)
+    }
+
+    // ── send audio note ────────────────────────────────────────────────────
+    const handleSendAudioNote = async (blob: Blob, duration: number) => {
+        setIsUploadingMedia(true)
+
+        try {
+            const formData = new FormData()
+            formData.append("file", blob, `group_voice_${Date.now()}.webm`)
+            formData.append("duration", String(duration))
+
+            const response = await axiosInstance.post("/upload/media", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            })
+
+            const mediaData = response.data?.data
+            if (mediaData?.url) {
+                const payload = JSON.stringify({
+                    type: "audio",
+                    url: mediaData.url,
+                    duration: mediaData.duration || duration,
+                })
+                sendGroupEncryptedMessage(payload)
+            }
+        } catch (err) {
+            console.error("Audio note upload failed:", err)
+        } finally {
+            setIsUploadingMedia(false)
+            setIsRecordingAudio(false)
+        }
+    }
+
+    // ── send file attachment ───────────────────────────────────────────────
+    const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        e.target.value = ""
+
+        setIsUploadingMedia(true)
+        try {
+            const formData = new FormData()
+            formData.append("file", file)
+
+            const response = await axiosInstance.post("/upload/media", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            })
+
+            const mediaData = response.data?.data
+            if (mediaData?.url) {
+                const payload = JSON.stringify({
+                    type: "file",
+                    url: mediaData.url,
+                    name: mediaData.name || file.name,
+                    size: mediaData.size || file.size,
+                })
+                sendGroupEncryptedMessage(payload)
+            }
+        } catch (err) {
+            console.error("File upload failed:", err)
+        } finally {
+            setIsUploadingMedia(false)
+        }
     }
 
     const liveGroup = liveData?.data?.group ?? group
@@ -754,9 +874,27 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                             const decryptedContent = decryptMessage(msg)
                             if (decryptedContent === null) return null
 
+                            // Check if decrypted content is a rich media payload
+                            let richPayload: {
+                                type: "file" | "audio"
+                                url: string
+                                name?: string
+                                size?: number
+                                duration?: number
+                            } | null = null
+                            try {
+                                if (
+                                    decryptedContent.startsWith('{"type":"file"') ||
+                                    decryptedContent.startsWith('{"type":"audio"')
+                                ) {
+                                    richPayload = JSON.parse(decryptedContent)
+                                }
+                            } catch {}
+
                             const shouldAnimate = isInitialScrollDone.current && (msg.is_pending || msg.id < 0)
                             const msgAggReactions = getAggregatedReactions(msg.reactions, authUser?.id || 0)
                             const isHovered = hoveredMsgId === msg.id || moreEmojiMsgId === msg.id
+                            const isStarred = msg.starred?.some(s => Number(s.user_id) === Number(authUser?.id)) ?? false
 
                             return (
                                 <div
@@ -836,6 +974,23 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                                 >
                                                     {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
                                                 </button>
+
+                                                {/* Star message button */}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        handleToggleStar(msg.id)
+                                                    }}
+                                                    className={`p-1 rounded-full transition-colors flex items-center justify-center ${
+                                                        isStarred
+                                                            ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/40"
+                                                            : "text-slate-400 hover:text-amber-500 dark:hover:text-amber-400"
+                                                    }`}
+                                                    title={isStarred ? "Unstar message" : "Star message"}
+                                                >
+                                                    <Star size={12} className={isStarred ? "fill-amber-400 text-amber-500" : ""} />
+                                                </button>
                                             </div>
 
                                             {/* Full Emoji Picker Popover */}
@@ -866,18 +1021,42 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
 
                                         {/* bubble & docked attached reaction badge */}
                                         <div className="relative inline-block">
-                                            <div className={`relative px-4 py-2.5 text-sm break-words shadow-xs ${
-                                                isMine
-                                                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
-                                                    : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
-                                            }`}>
-                                                <p className="whitespace-pre-wrap leading-relaxed">{decryptedContent}</p>
-                                                <div className={`text-[10px] tabular-nums mt-1 text-right ${
-                                                    isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
+                                            {richPayload?.type === "file" ? (
+                                                <DocumentCard
+                                                    url={richPayload.url}
+                                                    name={richPayload.name || "Attachment"}
+                                                    size={richPayload.size}
+                                                    isMine={isMine}
+                                                    createdAt={msg.created_at || new Date().toISOString()}
+                                                    isPending={msg.id < 0 || msg.is_pending}
+                                                    isStarred={isStarred}
+                                                />
+                                            ) : richPayload?.type === "audio" ? (
+                                                <AudioPlayerBubble
+                                                    url={richPayload.url}
+                                                    duration={richPayload.duration}
+                                                    isMine={isMine}
+                                                    createdAt={msg.created_at || new Date().toISOString()}
+                                                    isPending={msg.id < 0 || msg.is_pending}
+                                                    isStarred={isStarred}
+                                                />
+                                            ) : (
+                                                <div className={`relative px-4 py-2.5 text-sm break-words shadow-xs ${
+                                                    isMine
+                                                        ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
+                                                        : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
                                                 }`}>
-                                                    {new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    <p className="whitespace-pre-wrap leading-relaxed">{decryptedContent}</p>
+                                                    <div className={`text-[10px] tabular-nums mt-1 flex items-center justify-end gap-1 ${
+                                                        isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
+                                                    }`}>
+                                                        <span>{new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                        {isStarred && (
+                                                            <Star size={10} className="fill-amber-400 text-amber-400 inline shrink-0" />
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
 
                                             {/* Attached reaction pill docked to bottom edge of bubble */}
                                             {msgAggReactions.length > 0 && (
@@ -963,63 +1142,89 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                             </div>
                         )}
 
-                        <button
-                            type="button"
-                            className="h-11 w-11 shrink-0 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors"
-                            title="Add attachment"
-                        >
-                            <Plus size={20} />
-                        </button>
+                        {/* Hidden file input for documents/attachments */}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            onChange={handleFileSelected}
+                            className="hidden"
+                        />
 
-                        <div className="flex-1 flex items-center bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/60 rounded-full px-4 h-11 focus-within:ring-2 focus-within:ring-purple-500/50 focus-within:border-purple-500 transition-all">
-                            <input
-                                value={input}
-                                onChange={(e) => handleTyping(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !e.shiftKey) {
-                                        e.preventDefault()
+                        {isRecordingAudio ? (
+                            <AudioRecorderBar
+                                onSendAudio={handleSendAudioNote}
+                                onCancel={() => setIsRecordingAudio(false)}
+                                isUploading={isUploadingMedia}
+                            />
+                        ) : (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploadingMedia}
+                                    className="h-11 w-11 shrink-0 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
+                                    title="Add document or attachment"
+                                >
+                                    {isUploadingMedia ? (
+                                        <Loader2 size={18} className="animate-spin text-purple-600" />
+                                    ) : (
+                                        <Plus size={20} />
+                                    )}
+                                </button>
+
+                                <div className="flex-1 flex items-center bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/60 rounded-full px-4 h-11 focus-within:ring-2 focus-within:ring-purple-500/50 focus-within:border-purple-500 transition-all">
+                                    <input
+                                        value={input}
+                                        onChange={(e) => handleTyping(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter" && !e.shiftKey) {
+                                                e.preventDefault()
+                                                setShowInputEmojiPicker(false)
+                                                handleSend()
+                                            }
+                                        }}
+                                        placeholder={`Message ${liveGroup.name}...`}
+                                        className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
+                                    />
+                                    
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowInputEmojiPicker(prev => !prev)}
+                                        className={`p-1.5 input-emoji-btn transition-colors cursor-pointer ${
+                                            showInputEmojiPicker 
+                                                ? "text-purple-600 dark:text-purple-400" 
+                                                : "text-slate-400 hover:text-purple-600 dark:hover:text-purple-400"
+                                        }`}
+                                        title="Add emoji"
+                                    >
+                                        <Smile size={20} />
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsRecordingAudio(true)}
+                                        disabled={isUploadingMedia}
+                                        className="p-1.5 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors cursor-pointer disabled:opacity-40"
+                                        title="Record voice message"
+                                    >
+                                        <Mic size={20} />
+                                    </button>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
                                         setShowInputEmojiPicker(false)
                                         handleSend()
-                                    }
-                                }}
-                                placeholder={`Message ${liveGroup.name}...`}
-                                className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
-                            />
-                            
-                            <button
-                                type="button"
-                                onClick={() => setShowInputEmojiPicker(prev => !prev)}
-                                className={`p-1.5 input-emoji-btn transition-colors ${
-                                    showInputEmojiPicker 
-                                        ? "text-purple-600 dark:text-purple-400" 
-                                        : "text-slate-400 hover:text-purple-600 dark:hover:text-purple-400"
-                                }`}
-                                title="Add emoji"
-                            >
-                                <Smile size={20} />
-                            </button>
-
-                            <button
-                                type="button"
-                                className="p-1.5 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
-                                title="Voice message"
-                            >
-                                <Mic size={20} />
-                            </button>
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setShowInputEmojiPicker(false)
-                                handleSend()
-                            }}
-                            disabled={!input.trim()}
-                            className="h-11 w-11 shrink-0 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white flex items-center justify-center shadow-lg shadow-purple-600/30 transition-transform active:scale-95 cursor-pointer disabled:cursor-not-allowed"
-                            title="Send message"
-                        >
-                            <Send size={18} />
-                        </button>
+                                    }}
+                                    disabled={!input.trim()}
+                                    className="h-11 w-11 shrink-0 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white flex items-center justify-center shadow-lg shadow-purple-600/30 transition-transform active:scale-95 cursor-pointer disabled:cursor-not-allowed"
+                                    title="Send message"
+                                >
+                                    <Send size={18} />
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Search, MessageSquare, ShieldAlert, Ban } from "lucide-react"
+import { Search, MessageSquare, ShieldAlert, Ban, Archive, ArchiveRestore } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useGetApi } from "@/hooks/api"
+import axiosInstance from "@/api/axios"
+import useToast from "@/hooks/toast"
 import useDebounce from "@/hooks/debounce"
 import { useSocket } from "@/hooks/socket"
 import { CHAT_EVENTS } from "@/pages/chat/constants"
@@ -22,11 +24,16 @@ export interface UserResponse {
 interface Props {
     selectedUserId: number | null
     onSelectUser: (user: IUser) => void
+    externalSearch?: string
+    isArchived?: boolean
 }
 
-const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
+const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived = false }: Props) => {
     const authUser = useSelector(getUser)
-    const [search, setSearch] = useState("")
+    const toast = useToast()
+    const [internalSearch, setInternalSearch] = useState("")
+    const search = externalSearch !== undefined ? externalSearch : internalSearch
+    const setSearch = setInternalSearch
     const [page, setPage] = useState(1)
     const [userList, setUserList] = useState<IUser[]>([])
     const bottomRef = useRef<HTMLDivElement>(null)
@@ -43,6 +50,7 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
 
         const onRefresh = () => {
             queryClient.invalidateQueries({ queryKey: ['conversations'] })
+            queryClient.invalidateQueries({ queryKey: ['conversations-archived'] })
         }
 
         socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, onRefresh)
@@ -57,15 +65,30 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
     }, [socket, queryClient])
 
     // ── fetch conversations (when NOT searching) ──────────────────────────
+    const endpoint = isArchived ? "/conversations?archived=true" : "/conversations"
+    const convQueryKey = isArchived ? 'conversations-archived' : 'conversations'
+
     const { data: convData, isFetching: isFetchingConvs } = useGetApi<IConversation[]>(
-        "/conversations",
+        endpoint,
         undefined,
         {
-            queryKey: 'conversations',
+            queryKey: convQueryKey,
             enabled: !isSearching,
             staleTime: 0
         }
     )
+
+    const handleToggleArchive = async (e: React.MouseEvent, conversationId: number, archive: boolean) => {
+        e.stopPropagation()
+        try {
+            await axiosInstance.patch(`/conversations/${conversationId}/archive`, { archive })
+            queryClient.invalidateQueries({ queryKey: ['conversations'] })
+            queryClient.invalidateQueries({ queryKey: ['conversations-archived'] })
+            toast.success(archive ? "Conversation archived" : "Conversation unarchived")
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || "Failed to update archive status")
+        }
+    }
 
     // ── fetch users (when searching) ──────────────────────────────────────
     const { data: userData, isFetching: isFetchingUsers } = useGetApi<UserResponse>(
@@ -113,21 +136,23 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
 
     return (
         <div className="flex flex-col h-full bg-card">
-            {/* Search Input Bar */}
-            <div className="px-4 pb-3 pt-1">
-                <div className="relative group">
-                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-purple-600 dark:group-focus-within:text-purple-400" />
-                    <input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search conversations..."
-                        className="w-full pl-10 pr-12 py-2 text-xs bg-slate-100 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 rounded-xl outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all duration-200 placeholder:text-slate-400 text-slate-900 dark:text-slate-100"
-                    />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded-md pointer-events-none shadow-2xs">
-                        ⌘K
-                    </span>
+            {/* Search Input Bar (only if externalSearch is not provided) */}
+            {externalSearch === undefined && (
+                <div className="px-4 pb-3 pt-1">
+                    <div className="relative group">
+                        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-purple-600 dark:group-focus-within:text-purple-400" />
+                        <input
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search conversations..."
+                            className="w-full pl-10 pr-12 py-2 text-xs bg-slate-100 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 rounded-xl outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all duration-200 placeholder:text-slate-400 text-slate-900 dark:text-slate-100"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded-md pointer-events-none shadow-2xs">
+                            ⌘K
+                        </span>
+                    </div>
                 </div>
-            </div>
+            )}
 
             <div className="flex-1 overflow-y-auto px-3 custom-scrollbar">
 
@@ -136,13 +161,21 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
                 {!isFetching && (isSearching ? userList.length === 0 : conversations.length === 0) && (
                     <div className="flex flex-col items-center justify-center h-48 text-center px-4">
                         <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-3 text-slate-400">
-                            {isSearching ? <Search size={20} /> : <MessageSquare size={20} />}
+                            {isSearching ? <Search size={20} /> : isArchived ? <Archive size={20} /> : <MessageSquare size={20} />}
                         </div>
                         <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                            {isSearching ? "No users found" : "No conversations yet"}
+                            {isSearching
+                                ? "No users found"
+                                : isArchived
+                                ? "No archived chats"
+                                : "No conversations yet"}
                         </p>
                         <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                            {isSearching ? "Try searching with a different name or username" : "Search a user above to start chatting"}
+                            {isSearching
+                                ? "Try searching with a different name or username"
+                                : isArchived
+                                ? "Conversations you archive will appear here"
+                                : "Search a user above to start chatting"}
                         </p>
                     </div>
                 )}
@@ -184,7 +217,7 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
                             <div
                                 key={conv.id}
                                 onClick={() => onSelectUser(otherUser)}
-                                className={`flex items-center gap-3 p-3 cursor-pointer rounded-2xl transition-all duration-200 ${
+                                className={`group flex items-center gap-3 p-3 cursor-pointer rounded-2xl transition-all duration-200 ${
                                     isSelected 
                                         ? "bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 shadow-xs" 
                                         : "hover:bg-slate-100 dark:hover:bg-slate-800/50 text-slate-900 dark:text-slate-100"
@@ -194,11 +227,21 @@ const DirectList = ({ selectedUserId, onSelectUser }: Props) => {
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center justify-between gap-2 mb-0.5">
                                         <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{otherUser.name}</p>
-                                        {lastMsg && (
-                                            <span className="text-[11px] tabular-nums whitespace-nowrap text-slate-400 font-medium">
-                                                {new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
-                                        )}
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            {lastMsg && (
+                                                <span className="text-[11px] tabular-nums whitespace-nowrap text-slate-400 font-medium group-hover:hidden">
+                                                    {new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={(e) => handleToggleArchive(e, conv.id, !conv.is_archived)}
+                                                className="hidden group-hover:flex items-center justify-center p-1 rounded-md text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors"
+                                                title={conv.is_archived ? "Unarchive chat" : "Archive chat"}
+                                            >
+                                                {conv.is_archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="flex items-center justify-between gap-2">
                                         <p className="text-[11px] font-normal truncate text-slate-600 dark:text-slate-400">

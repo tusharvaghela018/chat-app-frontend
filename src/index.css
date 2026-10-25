@@ -196,3 +196,12 @@
 .delay-400 {
     animation-delay: 0.4s
 }
+
+/* Hide scrollbar for clean horizontal pill bars */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

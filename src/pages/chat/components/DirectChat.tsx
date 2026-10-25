@@ -3,12 +3,12 @@ import { useSelector } from "react-redux"
 import { 
     User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert, 
     Ban, Check, UserMinus, Loader2, Video, Phone, Search, 
-    Smile, Mic, Plus, CheckCheck, Copy 
+    Smile, Mic, Plus, CheckCheck, Copy, Archive, ArchiveRestore, Star 
 } from "lucide-react"
 import { useGetApi, usePatchApi } from "@/hooks/api"
 import axiosInstance from "@/api/axios"
 import { useSocket } from "@/hooks/socket"
-import { useChat, type IMessage, type IMessageReaction } from "@/pages/chat/hooks"
+import { useChat, type IMessage, type IMessageReaction, type IStarredItem } from "@/pages/chat/hooks"
 import { getUser } from "@/redux/slices/auth.slice"
 import type { IUser, IConversation } from "@/types"
 import Button from "@/common/Button"
@@ -22,6 +22,9 @@ import {
 
 import EmojiPicker, { Theme, type EmojiClickData } from "emoji-picker-react"
 import { usePresence } from "@/hooks/usePresence"
+import DocumentCard from "@/pages/chat/components/media/DocumentCard"
+import AudioPlayerBubble from "@/pages/chat/components/media/AudioPlayerBubble"
+import AudioRecorderBar from "@/pages/chat/components/media/AudioRecorderBar"
 
 interface Props {
     user: IUser
@@ -56,6 +59,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null)
     const [moreEmojiMsgId, setMoreEmojiMsgId] = useState<number | null>(null)
     const [showInputEmojiPicker, setShowInputEmojiPicker] = useState(false)
+
+    // Media and voice note state
+    const [isRecordingAudio, setIsRecordingAudio] = useState(false)
+    const [isUploadingMedia, setIsUploadingMedia] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement | null>(null)
 
     useEffect(() => {
         const handleDocumentClick = (e: MouseEvent) => {
@@ -122,12 +130,14 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const isIRecipient = conversation?.receiver_id === authUser?.id
 
     const iBlocked = isIRequester ? conversation?.blocked_by_sender : conversation?.blocked_by_receiver
+    const isArchived = isIRequester ? (conversation as any)?.archived_by_sender : (conversation as any)?.archived_by_receiver
 
     // If I am the requester and status is rejected, it means THEY rejected ME
     const iAmRejected = isIRequester && isRejected
 
     const { mutate: updateStatus } = usePatchApi(`/conversations/${conversation?.id}/status`)
     const { mutate: updateBlock } = usePatchApi(`/conversations/${conversation?.id}/block`)
+    const { mutate: updateArchive } = usePatchApi(`/conversations/${conversation?.id}/archive`)
 
     // ── initial load ─────────────────────────────────────────────────────
     const { data: messageData, isFetching, isSuccess, refetch: refetchMessages } = useGetApi<{ messages: IMessage[], hasMore: boolean }>(
@@ -181,6 +191,51 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             }
         }
     })
+
+    const handleToggleStar = async (messageId: number) => {
+        if (!authUser?.id) return
+
+        // 1. Instant optimistic star update
+        setMessages((prev) =>
+            prev.map((m) => {
+                if (Number(m.id) !== Number(messageId)) return m
+                const current = m.starred || []
+                const isCurrentlyStarred = current.some((s) => Number(s.user_id) === Number(authUser.id))
+                let nextStarred: IStarredItem[]
+                if (isCurrentlyStarred) {
+                    nextStarred = current.filter((s) => Number(s.user_id) !== Number(authUser.id))
+                } else {
+                    nextStarred = [...current, { user_id: Number(authUser.id), message_id: Number(messageId) }]
+                }
+                return { ...m, starred: nextStarred }
+            })
+        )
+
+        try {
+            const res = await axiosInstance.post("/starred-messages/toggle", { messageId })
+            const serverStarred = res.data?.data?.isStarred
+            if (typeof serverStarred === "boolean") {
+                setMessages((prev) =>
+                    prev.map((m) => {
+                        if (Number(m.id) !== Number(messageId)) return m
+                        const current = (m.starred || []).filter((s) => Number(s.user_id) !== Number(authUser.id))
+                        return {
+                            ...m,
+                            starred: serverStarred
+                                ? [...current, { user_id: Number(authUser.id), message_id: Number(messageId) }]
+                                : current,
+                        }
+                    })
+                )
+            }
+            queryClient.invalidateQueries({ queryKey: ["starred-messages"] })
+            queryClient.invalidateQueries({ queryKey: ["starred-messages-ids"] })
+            queryClient.invalidateQueries({ queryKey: [`messages-${user.id}`] })
+        } catch (err) {
+            console.error("Failed to toggle star:", err)
+            refetchMessages()
+        }
+    }
 
     const handleToggleReaction = (messageId: number, emoji: string) => {
         if (!authUser?.id) return
@@ -246,6 +301,17 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             onSuccess: () => {
                 queryClient.invalidateQueries({ queryKey: [`conversation-${user.id}`] })
                 queryClient.invalidateQueries({ queryKey: ['conversations'] })
+                queryClient.invalidateQueries({ queryKey: ['conversations-archived'] })
+            }
+        })
+    }
+
+    const handleToggleArchive = (archive: boolean) => {
+        updateArchive({ body: { archive } }, {
+            onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: [`conversation-${user.id}`] })
+                queryClient.invalidateQueries({ queryKey: ['conversations'] })
+                queryClient.invalidateQueries({ queryKey: ['conversations-archived'] })
             }
         })
     }
@@ -412,18 +478,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         }, 2000)
     }
 
-    // ── send ──────────────────────────────────────────────────────────────
-    const handleSend = () => {
-        if (!input.trim() || iBlocked || iAmRejected) return
-
-        const plainText = input.trim()
-        setInput("")
-        emitTypingStop(user.id)
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-
-        let finalContent = plainText
+    // ── send encrypted payload helper ────────────────────────────────────
+    const sendEncryptedMessage = (rawContent: string) => {
+        let finalContent = rawContent
         if (user.public_key && myKeys) {
-            const encrypted = encryptDirectMessage(plainText, user.public_key, myKeys.secretKey)
+            const encrypted = encryptDirectMessage(rawContent, user.public_key, myKeys.secretKey)
             finalContent = JSON.stringify(encrypted)
         }
 
@@ -439,6 +498,81 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         }
 
         sendMessage(user.id, finalContent, optimisticMsg)
+    }
+
+    // ── send text message ──────────────────────────────────────────────────
+    const handleSend = () => {
+        if (!input.trim() || iBlocked || iAmRejected) return
+
+        const plainText = input.trim()
+        setInput("")
+        emitTypingStop(user.id)
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+
+        sendEncryptedMessage(plainText)
+    }
+
+    // ── send audio note ────────────────────────────────────────────────────
+    const handleSendAudioNote = async (blob: Blob, duration: number) => {
+        if (iBlocked || iAmRejected) return
+        setIsUploadingMedia(true)
+
+        try {
+            const formData = new FormData()
+            formData.append("file", blob, `voice_note_${Date.now()}.webm`)
+            formData.append("duration", String(duration))
+
+            const response = await axiosInstance.post("/upload/media", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            })
+
+            const mediaData = response.data?.data
+            if (mediaData?.url) {
+                const payload = JSON.stringify({
+                    type: "audio",
+                    url: mediaData.url,
+                    duration: mediaData.duration || duration,
+                })
+                sendEncryptedMessage(payload)
+            }
+        } catch (err) {
+            console.error("Audio note upload failed:", err)
+        } finally {
+            setIsUploadingMedia(false)
+            setIsRecordingAudio(false)
+        }
+    }
+
+    // ── send file attachment ───────────────────────────────────────────────
+    const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file || iBlocked || iAmRejected) return
+        e.target.value = ""
+
+        setIsUploadingMedia(true)
+        try {
+            const formData = new FormData()
+            formData.append("file", file)
+
+            const response = await axiosInstance.post("/upload/media", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            })
+
+            const mediaData = response.data?.data
+            if (mediaData?.url) {
+                const payload = JSON.stringify({
+                    type: "file",
+                    url: mediaData.url,
+                    name: mediaData.name || file.name,
+                    size: mediaData.size || file.size,
+                })
+                sendEncryptedMessage(payload)
+            }
+        } catch (err) {
+            console.error("File upload failed:", err)
+        } finally {
+            setIsUploadingMedia(false)
+        }
     }
 
     return (
@@ -529,6 +663,19 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                         <Ban size={18} />
                     </button>
 
+                    <button
+                        type="button"
+                        onClick={() => handleToggleArchive(!isArchived)}
+                        className={`p-2 rounded-full transition-colors ${
+                            isArchived 
+                                ? "text-purple-600 bg-purple-50 dark:bg-purple-950/40" 
+                                : "text-slate-500 hover:text-purple-600 dark:text-slate-400 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                        title={isArchived ? "Unarchive conversation" : "Archive conversation"}
+                    >
+                        {isArchived ? <ArchiveRestore size={18} /> : <Archive size={18} />}
+                    </button>
+
                     {onClose && (
                         <div className="border-l border-slate-200 dark:border-slate-800 ml-1 pl-1">
                             <button
@@ -597,9 +744,27 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
 
                             if (decryptedContent === null) return null
 
+                            // Check if decrypted content is a rich media payload
+                            let richPayload: {
+                                type: "file" | "audio"
+                                url: string
+                                name?: string
+                                size?: number
+                                duration?: number
+                            } | null = null
+                            try {
+                                if (
+                                    decryptedContent.startsWith('{"type":"file"') ||
+                                    decryptedContent.startsWith('{"type":"audio"')
+                                ) {
+                                    richPayload = JSON.parse(decryptedContent)
+                                }
+                            } catch {}
+
                             const shouldAnimate = isInitialScrollDone.current && (msg.is_pending || msg.id < 0)
                             const msgAggReactions = getAggregatedReactions(msg.reactions, authUser?.id || 0)
                             const isHovered = hoveredMsgId === msg.id || moreEmojiMsgId === msg.id
+                            const isStarred = msg.starred?.some(s => Number(s.user_id) === Number(authUser?.id)) ?? false
 
                             return (
                                 <div
@@ -626,142 +791,185 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                     )}
 
                                     <div className={`group relative flex flex-col ${isMine ? "items-end" : "items-start"} max-w-[85%] sm:max-w-md`}>
-                                        
-                                        {/* floating hover action toolbar */}
-                                        <div className={`absolute -top-4 ${
-                                            isMine ? "right-2" : "left-2"
-                                        } z-30 transition-all duration-150 emoji-picker-container ${
-                                            isHovered
-                                                ? "opacity-100 pointer-events-auto scale-100"
-                                                : "opacity-0 pointer-events-none scale-95"
-                                        }`}>
-                                            <div className="flex items-center gap-0.5 bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-md border border-slate-200 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-md">
-                                                {COMMON_EMOJIS.map(emoji => (
-                                                    <button
-                                                        key={emoji}
-                                                        type="button"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            handleToggleReaction(msg.id, emoji)
-                                                        }}
-                                                        className="hover:scale-125 active:scale-95 transition-transform text-xs p-1"
-                                                        title={`React with ${emoji}`}
-                                                    >
-                                                        {emoji}
-                                                    </button>
-                                                ))}
-
-                                                {/* +Emoji icon button */}
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setMoreEmojiMsgId(moreEmojiMsgId === msg.id ? null : msg.id)
-                                                    }}
-                                                    className={`p-1 rounded-full transition-colors flex items-center justify-center ${
-                                                        moreEmojiMsgId === msg.id
-                                                            ? "text-purple-600 bg-purple-100 dark:bg-purple-900/40"
-                                                            : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"
-                                                    }`}
-                                                    title="Add custom reaction"
-                                                >
-                                                    <Smile size={13} />
-                                                    <span className="text-[10px] font-bold leading-none -ml-0.5">+</span>
-                                                </button>
-
-                                                <div className="h-3 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        handleCopyText(msg.id, decryptedContent)
-                                                    }}
-                                                    className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors"
-                                                    title="Copy text"
-                                                >
-                                                    {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                                                </button>
-                                            </div>
-
-                                            {/* Full Emoji Picker Popover for reactions */}
-                                            {moreEmojiMsgId === msg.id && (
-                                                <div className={`absolute top-full mt-2 ${
-                                                    isMine ? "right-0" : "left-0"
-                                                } z-50 shadow-2xl rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-150`}>
-                                                    <EmojiPicker
-                                                        theme={document.documentElement.classList.contains("dark") ? Theme.DARK : Theme.LIGHT}
-                                                        onEmojiClick={(emojiData: EmojiClickData) => {
-                                                            handleToggleReaction(msg.id, emojiData.emoji)
-                                                            setMoreEmojiMsgId(null)
-                                                        }}
-                                                        lazyLoadEmojis={true}
-                                                        searchPlaceHolder="React with emoji..."
-                                                        width={300}
-                                                        height={380}
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* bubble & docked attached reaction badge */}
-                                        <div className="relative inline-block">
-                                            <div className={`relative px-4 py-2.5 text-sm break-words shadow-xs ${
-                                                isMine
-                                                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
-                                                    : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
-                                            }`}>
-                                                <p className="whitespace-pre-wrap leading-relaxed">{decryptedContent}</p>
                                                 
-                                                <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] tabular-nums ${
-                                                    isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
-                                                }`}>
-                                                    <span>
-                                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                    </span>
-                                                    {isMine && (
-                                                        <span className="ml-0.5">
-                                                            {msg.id < 0 || msg.is_pending ? (
-                                                                <span className="inline-block animate-pulse text-[9px]">●</span>
-                                                            ) : msg.is_seen ? (
-                                                                <CheckCheck size={13} className="inline text-purple-200" />
-                                                            ) : (
-                                                                <Check size={13} className="inline text-purple-200" />
-                                                            )}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Attached reaction pill docked to bottom edge of bubble */}
-                                            {msgAggReactions.length > 0 && (
-                                                <div className={`absolute -bottom-2.5 z-10 flex items-center gap-1 ${
+                                                {/* floating hover action toolbar */}
+                                                <div className={`absolute -top-4 ${
                                                     isMine ? "right-2" : "left-2"
+                                                } z-30 transition-all duration-150 emoji-picker-container ${
+                                                    isHovered
+                                                        ? "opacity-100 pointer-events-auto scale-100"
+                                                        : "opacity-0 pointer-events-none scale-95"
                                                 }`}>
-                                                    <div className="flex items-center gap-1 bg-white/95 dark:bg-[#1e293b]/95 border border-slate-200/90 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-xs backdrop-blur-md">
-                                                        {msgAggReactions.map(r => (
-                                                            <button 
-                                                                key={r.emoji}
+                                                    <div className="flex items-center gap-0.5 bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-md border border-slate-200 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-md">
+                                                        {COMMON_EMOJIS.map(emoji => (
+                                                            <button
+                                                                key={emoji}
                                                                 type="button"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation()
-                                                                    handleToggleReaction(msg.id, r.emoji)
+                                                                    handleToggleReaction(msg.id, emoji)
                                                                 }}
-                                                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs transition-all hover:scale-110 active:scale-95 ${
-                                                                    r.hasReacted
-                                                                        ? "bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 font-bold"
-                                                                        : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                                                }`}
-                                                                title={r.hasReacted ? `You reacted with ${r.emoji} (click to remove)` : `Reacted with ${r.emoji}`}
+                                                                className="hover:scale-125 active:scale-95 transition-transform text-xs p-1"
+                                                                title={`React with ${emoji}`}
                                                             >
-                                                                <span className="text-xs leading-none">{r.emoji}</span>
-                                                                <span className="text-[10px] font-bold leading-none">{r.count}</span>
+                                                                {emoji}
                                                             </button>
                                                         ))}
+
+                                                        {/* +Emoji icon button */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                setMoreEmojiMsgId(moreEmojiMsgId === msg.id ? null : msg.id)
+                                                            }}
+                                                            className={`p-1 rounded-full transition-colors flex items-center justify-center ${
+                                                                moreEmojiMsgId === msg.id
+                                                                    ? "text-purple-600 bg-purple-100 dark:bg-purple-900/40"
+                                                                    : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"
+                                                            }`}
+                                                            title="Add custom reaction"
+                                                        >
+                                                            <Smile size={13} />
+                                                            <span className="text-[10px] font-bold leading-none -ml-0.5">+</span>
+                                                        </button>
+
+                                                        <div className="h-3 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleCopyText(msg.id, decryptedContent)
+                                                            }}
+                                                            className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors"
+                                                            title="Copy text"
+                                                        >
+                                                            {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                                                        </button>
+
+                                                        {/* Star message button */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleToggleStar(msg.id)
+                                                            }}
+                                                            className={`p-1 rounded-full transition-colors flex items-center justify-center ${
+                                                                isStarred
+                                                                    ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/40"
+                                                                    : "text-slate-400 hover:text-amber-500 dark:hover:text-amber-400"
+                                                            }`}
+                                                            title={isStarred ? "Unstar message" : "Star message"}
+                                                        >
+                                                            <Star size={12} className={isStarred ? "fill-amber-400 text-amber-500" : ""} />
+                                                        </button>
                                                     </div>
+
+                                                    {/* Full Emoji Picker Popover for reactions */}
+                                                    {moreEmojiMsgId === msg.id && (
+                                                        <div className={`absolute top-full mt-2 ${
+                                                            isMine ? "right-0" : "left-0"
+                                                        } z-50 shadow-2xl rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-150`}>
+                                                            <EmojiPicker
+                                                                theme={document.documentElement.classList.contains("dark") ? Theme.DARK : Theme.LIGHT}
+                                                                onEmojiClick={(emojiData: EmojiClickData) => {
+                                                                    handleToggleReaction(msg.id, emojiData.emoji)
+                                                                    setMoreEmojiMsgId(null)
+                                                                }}
+                                                                lazyLoadEmojis={true}
+                                                                searchPlaceHolder="React with emoji..."
+                                                                width={300}
+                                                                height={380}
+                                                            />
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            )}
-                                        </div>
-                                    </div>
+
+                                                {/* bubble & docked attached reaction badge */}
+                                                <div className="relative inline-block">
+                                                    {richPayload?.type === "file" ? (
+                                                        <DocumentCard
+                                                            url={richPayload.url}
+                                                            name={richPayload.name || "Attachment"}
+                                                            size={richPayload.size}
+                                                            isMine={isMine}
+                                                            createdAt={msg.created_at}
+                                                            isSeen={msg.is_seen}
+                                                            isPending={msg.id < 0 || msg.is_pending}
+                                                            isStarred={isStarred}
+                                                        />
+                                                    ) : richPayload?.type === "audio" ? (
+                                                        <AudioPlayerBubble
+                                                            url={richPayload.url}
+                                                            duration={richPayload.duration}
+                                                            isMine={isMine}
+                                                            createdAt={msg.created_at}
+                                                            isSeen={msg.is_seen}
+                                                            isPending={msg.id < 0 || msg.is_pending}
+                                                            isStarred={isStarred}
+                                                        />
+                                                    ) : (
+                                                        <div className={`relative px-4 py-2.5 text-sm break-words shadow-xs ${
+                                                            isMine
+                                                                ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
+                                                                : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
+                                                        }`}>
+                                                            <p className="whitespace-pre-wrap leading-relaxed">{decryptedContent}</p>
+                                                            
+                                                            <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] tabular-nums ${
+                                                                isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
+                                                            }`}>
+                                                                <span>
+                                                                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                                {isStarred && (
+                                                                    <Star size={10} className="fill-amber-400 text-amber-400 inline shrink-0 ml-0.5" />
+                                                                )}
+                                                                {isMine && (
+                                                                    <span className="ml-0.5">
+                                                                        {msg.id < 0 || msg.is_pending ? (
+                                                                            <span className="inline-block animate-pulse text-[9px]">●</span>
+                                                                        ) : msg.is_seen ? (
+                                                                            <CheckCheck size={13} className="inline text-purple-200" />
+                                                                        ) : (
+                                                                            <Check size={13} className="inline text-purple-200" />
+                                                                        )}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Attached reaction pill docked to bottom edge of bubble */}
+                                                    {msgAggReactions.length > 0 && (
+                                                        <div className={`absolute -bottom-2.5 z-10 flex items-center gap-1 ${
+                                                            isMine ? "right-2" : "left-2"
+                                                        }`}>
+                                                            <div className="flex items-center gap-1 bg-white/95 dark:bg-[#1e293b]/95 border border-slate-200/90 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-xs backdrop-blur-md">
+                                                                {msgAggReactions.map(({ emoji, count, hasReacted }) => (
+                                                                    <button
+                                                                        key={emoji}
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            handleToggleReaction(msg.id, emoji)
+                                                                        }}
+                                                                        className={`flex items-center gap-1 text-[11px] px-1 py-0.5 rounded-full transition-transform hover:scale-110 active:scale-95 ${
+                                                                            hasReacted
+                                                                                ? "bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-bold"
+                                                                                : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                                                        }`}
+                                                                        title={hasReacted ? `You reacted with ${emoji} (click to remove)` : `Reacted with ${emoji}`}
+                                                                    >
+                                                                        <span>{emoji}</span>
+                                                                        {count > 1 && <span className="text-[9px] font-semibold">{count}</span>}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                 </div>
                             )
                         })}
@@ -904,68 +1112,94 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             </div>
                         )}
 
-                        {/* + attachment button matching mockup */}
-                        <button
-                            type="button"
-                            className="h-11 w-11 shrink-0 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors"
-                            title="Add attachment"
-                        >
-                            <Plus size={20} />
-                        </button>
+                        {/* Hidden file input for documents/attachments */}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            onChange={handleFileSelected}
+                            className="hidden"
+                        />
 
-                        {/* input pill matching mockup */}
-                        <div className="flex-1 flex items-center bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/60 rounded-full px-4 h-11 focus-within:ring-2 focus-within:ring-purple-500/50 focus-within:border-purple-500 transition-all">
-                            <input
-                                value={input}
-                                onChange={(e) => handleTyping(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !e.shiftKey) {
-                                        e.preventDefault()
+                        {isRecordingAudio ? (
+                            <AudioRecorderBar
+                                onSendAudio={handleSendAudioNote}
+                                onCancel={() => setIsRecordingAudio(false)}
+                                isUploading={isUploadingMedia}
+                            />
+                        ) : (
+                            <>
+                                {/* + attachment button matching mockup */}
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploadingMedia}
+                                    className="h-11 w-11 shrink-0 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
+                                    title="Add document or attachment"
+                                >
+                                    {isUploadingMedia ? (
+                                        <Loader2 size={18} className="animate-spin text-purple-600" />
+                                    ) : (
+                                        <Plus size={20} />
+                                    )}
+                                </button>
+
+                                {/* input pill matching mockup */}
+                                <div className="flex-1 flex items-center bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/60 rounded-full px-4 h-11 focus-within:ring-2 focus-within:ring-purple-500/50 focus-within:border-purple-500 transition-all">
+                                    <input
+                                        value={input}
+                                        onChange={(e) => handleTyping(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter" && !e.shiftKey) {
+                                                e.preventDefault()
+                                                setShowInputEmojiPicker(false)
+                                                handleSend()
+                                            }
+                                        }}
+                                        placeholder={`Message ${user.name}...`}
+                                        className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
+                                    />
+                                    
+                                    {/* smile emoji button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowInputEmojiPicker(prev => !prev)}
+                                        className={`p-1.5 input-emoji-btn transition-colors cursor-pointer ${
+                                            showInputEmojiPicker 
+                                                ? "text-purple-600 dark:text-purple-400" 
+                                                : "text-slate-400 hover:text-purple-600 dark:hover:text-purple-400"
+                                        }`}
+                                        title="Add emoji"
+                                    >
+                                        <Smile size={20} />
+                                    </button>
+
+                                    {/* microphone button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsRecordingAudio(true)}
+                                        disabled={isUploadingMedia}
+                                        className="p-1.5 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors cursor-pointer disabled:opacity-40"
+                                        title="Record voice message"
+                                    >
+                                        <Mic size={20} />
+                                    </button>
+                                </div>
+
+                                {/* circular purple send button matching mockup */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
                                         setShowInputEmojiPicker(false)
                                         handleSend()
-                                    }
-                                }}
-                                placeholder={`Message ${user.name}...`}
-                                className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
-                            />
-                            
-                            {/* smile emoji button */}
-                            <button
-                                type="button"
-                                onClick={() => setShowInputEmojiPicker(prev => !prev)}
-                                className={`p-1.5 input-emoji-btn transition-colors ${
-                                    showInputEmojiPicker 
-                                        ? "text-purple-600 dark:text-purple-400" 
-                                        : "text-slate-400 hover:text-purple-600 dark:hover:text-purple-400"
-                                }`}
-                                title="Add emoji"
-                            >
-                                <Smile size={20} />
-                            </button>
-
-                            {/* microphone button */}
-                            <button
-                                type="button"
-                                className="p-1.5 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
-                                title="Voice message"
-                            >
-                                <Mic size={20} />
-                            </button>
-                        </div>
-
-                        {/* circular purple send button matching mockup */}
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setShowInputEmojiPicker(false)
-                                handleSend()
-                            }}
-                            disabled={!input.trim()}
-                            className="h-11 w-11 shrink-0 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white flex items-center justify-center shadow-lg shadow-purple-600/30 transition-transform active:scale-95 cursor-pointer disabled:cursor-not-allowed"
-                            title="Send message"
-                        >
-                            <Send size={18} />
-                        </button>
+                                    }}
+                                    disabled={!input.trim()}
+                                    className="h-11 w-11 shrink-0 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white flex items-center justify-center shadow-lg shadow-purple-600/30 transition-transform active:scale-95 cursor-pointer disabled:cursor-not-allowed"
+                                    title="Send message"
+                                >
+                                    <Send size={18} />
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

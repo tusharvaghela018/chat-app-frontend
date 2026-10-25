@@ -73,10 +73,10 @@ const ChatPage = () => {
     return (
         <div className="h-full flex bg-background overflow-hidden relative">
 
-            {/* Sidebar Container */}
+            {/* Sidebar Container with Slim Icon Rail */}
             <div className={`
                 ${(selectedUser || selectedGroup) ? "hidden lg:block" : "block"}
-                w-full md:w-80 lg:w-[380px] shrink-0 bg-card border-r border-slate-200/90 dark:border-slate-800 h-full
+                w-full md:w-[380px] lg:w-[420px] shrink-0 bg-card border-r border-slate-200/90 dark:border-slate-800 h-full
             `}>
                 <Sidebar
                     selectedUserId={selectedUser?.id ?? null}
