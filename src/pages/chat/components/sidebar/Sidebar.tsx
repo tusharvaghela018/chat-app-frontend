@@ -68,12 +68,23 @@ const Sidebar = ({
             queryClient.invalidateQueries({ queryKey: ["starred-messages-ids"] })
         }
 
+        const handleRefreshConversations = () => {
+            queryClient.invalidateQueries({ queryKey: ["conversations"] })
+            queryClient.invalidateQueries({ queryKey: ["conversations-archived"] })
+        }
+
         socket.on(CHAT_EVENTS.STAR_UPDATED, handleStarUpdated)
         socket.on(GROUP_EVENTS.STAR_UPDATED, handleStarUpdated)
+        socket.on(CHAT_EVENTS.NEW_REQUEST, handleRefreshConversations)
+        socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, handleRefreshConversations)
+        socket.on(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, handleRefreshConversations)
 
         return () => {
             socket.off(CHAT_EVENTS.STAR_UPDATED, handleStarUpdated)
             socket.off(GROUP_EVENTS.STAR_UPDATED, handleStarUpdated)
+            socket.off(CHAT_EVENTS.NEW_REQUEST, handleRefreshConversations)
+            socket.off(CHAT_EVENTS.RECEIVE_MESSAGE, handleRefreshConversations)
+            socket.off(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, handleRefreshConversations)
         }
     }, [socket, queryClient])
 

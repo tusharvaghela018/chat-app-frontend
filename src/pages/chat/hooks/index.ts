@@ -100,6 +100,8 @@ export const useChat = ({
                 
                 if (isRelevant) {
                     activeConvRef.current = msg.conversation_id;
+                    queryClient.invalidateQueries({ queryKey: [`conversation-${selectedUserRef.current}`] })
+                    queryClient.invalidateQueries({ queryKey: ['conversations'] })
                 }
             }
 

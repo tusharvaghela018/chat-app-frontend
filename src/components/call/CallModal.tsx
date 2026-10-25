@@ -53,9 +53,11 @@ export const CallModal: React.FC = () => {
     useEffect(() => {
         if (remoteVideoRef.current && remoteStream) {
             remoteVideoRef.current.srcObject = remoteStream;
+            remoteVideoRef.current.play().catch(() => {});
         }
         if (remoteAudioRef.current && remoteStream) {
             remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.play().catch(() => {});
         }
     }, [remoteStream, callStatus]);
 
@@ -131,6 +133,7 @@ export const CallModal: React.FC = () => {
                                     ref={remoteVideoRef}
                                     autoPlay
                                     playsInline
+                                    muted
                                     className="w-full h-full object-cover"
                                 />
                             ) : (

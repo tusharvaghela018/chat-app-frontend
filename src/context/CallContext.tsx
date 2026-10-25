@@ -45,7 +45,28 @@ const ICE_SERVERS: RTCConfiguration = {
         { urls: "stun:stun1.l.google.com:19302" },
         { urls: "stun:stun2.l.google.com:19302" },
         { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        { urls: "stun:global.stun.twilio.com:3478" },
+        // Public open-relay TURN servers so peers behind symmetric NATs or firewalls can connect
+        {
+            urls: [
+                "turn:openrelay.metered.ca:80",
+                "turn:openrelay.metered.ca:443",
+                "turn:openrelay.metered.ca:443?transport=tcp",
+            ],
+            username: "openrelay",
+            credential: "openrelay",
+        },
     ],
+    iceCandidatePoolSize: 10,
+    bundlePolicy: "max-bundle",
+    rtcpMuxPolicy: "require",
+};
+
+const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
 };
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -76,10 +97,40 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const localStreamRef = useRef<MediaStream | null>(null);
     const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
     const durationIntervalRef = useRef<any>(null);
+    const persistentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+    // Persistent audio player across entire session (works even when CallModal is minimized)
+    useEffect(() => {
+        if (!persistentAudioRef.current) {
+            const el = new Audio();
+            el.autoplay = true;
+            (el as any).playsInline = true;
+            persistentAudioRef.current = el;
+        }
+
+        const el = persistentAudioRef.current;
+        if (remoteStream && callStatus === "connected") {
+            el.srcObject = remoteStream;
+            el.play().catch((err) => {
+                console.warn("Remote audio autoplay blocked by browser policy:", err);
+            });
+        } else if (el) {
+            el.srcObject = null;
+        }
+
+        return () => {
+            if (el) el.srcObject = null;
+        };
+    }, [remoteStream, callStatus]);
 
     // Stop and cleanup streams and peer connection
     const cleanupCall = useCallback(() => {
         callAudio.stopAll();
+
+        if (persistentAudioRef.current) {
+            persistentAudioRef.current.srcObject = null;
+            persistentAudioRef.current.pause();
+        }
 
         if (durationIntervalRef.current) {
             clearInterval(durationIntervalRef.current);
@@ -94,6 +145,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (pcRef.current) {
             pcRef.current.ontrack = null;
             pcRef.current.onicecandidate = null;
+            pcRef.current.oniceconnectionstatechange = null;
+            pcRef.current.onconnectionstatechange = null;
             pcRef.current.close();
             pcRef.current = null;
         }
@@ -162,17 +215,63 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             pc.onicecandidate = (event) => {
                 if (event.candidate && socket) {
+                    const candidatePayload = event.candidate.toJSON
+                        ? event.candidate.toJSON()
+                        : {
+                              candidate: event.candidate.candidate,
+                              sdpMid: event.candidate.sdpMid,
+                              sdpMLineIndex: event.candidate.sdpMLineIndex,
+                              usernameFragment: event.candidate.usernameFragment,
+                          };
                     socket.emit(CALL_EVENTS.ICE_CANDIDATE, {
                         targetUserId,
-                        candidate: event.candidate,
+                        candidate: candidatePayload,
                     });
                 }
             };
 
-            pc.ontrack = (event) => {
-                if (event.streams && event.streams[0]) {
-                    setRemoteStream(event.streams[0]);
+            pc.oniceconnectionstatechange = () => {
+                console.log("WebRTC ICE Connection State:", pc.iceConnectionState);
+                if (pc.iceConnectionState === "failed") {
+                    console.warn("ICE connection failed, attempting restart...");
+                    try {
+                        pc.restartIce();
+                    } catch (e) {
+                        console.error("restartIce error:", e);
+                    }
                 }
+            };
+
+            pc.onconnectionstatechange = () => {
+                console.log("WebRTC Connection State:", pc.connectionState);
+            };
+
+            pc.ontrack = (event) => {
+                console.log("WebRTC ontrack received:", event.track.kind, event.streams);
+
+                let stream: MediaStream;
+                if (event.streams && event.streams[0]) {
+                    stream = event.streams[0];
+                } else {
+                    stream = new MediaStream([event.track]);
+                }
+
+                // Force a new MediaStream instance so React state updates and video/audio elements trigger
+                setRemoteStream(new MediaStream(stream.getTracks()));
+
+                // When track un-mutes (first RTP packet arrives), re-trigger stream binding
+                event.track.onunmute = () => {
+                    console.log("WebRTC remote track un-muted:", event.track.kind);
+                    setRemoteStream(new MediaStream(stream.getTracks()));
+                };
+
+                stream.onaddtrack = () => {
+                    setRemoteStream(new MediaStream(stream.getTracks()));
+                };
+
+                stream.onremovetrack = () => {
+                    setRemoteStream(new MediaStream(stream.getTracks()));
+                };
             };
 
             // Add local tracks to peer connection
@@ -200,9 +299,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setCallStatus("outgoing");
                 setIsVideoOff(!isVideo);
 
-                // Acquire camera/microphone
+                // Acquire camera/microphone with hardware echo cancellation & noise suppression
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: true,
+                    audio: AUDIO_CONSTRAINTS,
                     video: isVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
                 });
 
@@ -231,23 +330,16 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             callAudio.stopAll();
             const isVideo = callType === "video";
 
+            // Acquire camera/microphone with hardware echo cancellation & noise suppression
             const stream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
+                audio: AUDIO_CONSTRAINTS,
                 video: isVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
             });
 
             localStreamRef.current = stream;
             setLocalStream(stream);
 
-            const pc = createPeerConnection(remoteUser.id);
-
-            // Apply any pending queued ICE candidates
-            while (pendingCandidatesRef.current.length > 0) {
-                const candidate = pendingCandidatesRef.current.shift();
-                if (candidate) {
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
-                }
-            }
+            createPeerConnection(remoteUser.id);
 
             setCallStatus("connected");
             socket.emit(CALL_EVENTS.ACCEPT, { callerId: remoteUser.id });
@@ -428,8 +520,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             callAudio.stopAll();
             setCallStatus("connected");
 
-            if (!remoteUser) return;
-            const pc = createPeerConnection(remoteUser.id);
+            const targetId = _data?.recipientId || remoteUser?.id;
+            if (!targetId) return;
+            const pc = createPeerConnection(targetId);
 
             try {
                 const offer = await pc.createOffer({
@@ -439,7 +532,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 await pc.setLocalDescription(offer);
 
                 socket.emit(CALL_EVENTS.OFFER, {
-                    targetUserId: remoteUser.id,
+                    targetUserId: targetId,
                     sdp: pc.localDescription,
                 });
             } catch (err) {
@@ -514,6 +607,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // ICE candidate received
         const handleIceCandidate = async (data: { senderId: number; candidate: RTCIceCandidateInit }) => {
+            if (!data?.candidate) return;
             const pc = pcRef.current;
             if (pc && pc.remoteDescription && pc.remoteDescription.type) {
                 try {
