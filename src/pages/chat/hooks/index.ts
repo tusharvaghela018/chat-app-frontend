@@ -92,27 +92,39 @@ export const useChat = ({
 
         // ── receive_message ───────────────────────────────────────────────
         const onReceiveMessage = (msg: IMessage) => {
-            // If activeConvRef is null, it might be the first message of a new conversation
-            if (activeConvRef.current === null) {
-                const isRelevant = 
-                    (msg.sender_id === selectedUserRef.current && msg.receiver_id === currentUserId) ||
-                    (msg.sender_id === currentUserId && msg.receiver_id === selectedUserRef.current);
-                
-                if (isRelevant) {
-                    activeConvRef.current = msg.conversation_id;
-                    queryClient.invalidateQueries({ queryKey: [`conversation-${selectedUserRef.current}`] })
-                    queryClient.invalidateQueries({ queryKey: ['conversations'] })
-                }
+            const currentUid = currentUserIdRef.current
+            const selectedUid = selectedUserRef.current
+
+            // Check if this message belongs to the active 1-on-1 chat
+            const isRelevantForOpenChat =
+                (Number(msg.sender_id) === Number(selectedUid) && Number(msg.receiver_id) === Number(currentUid)) ||
+                (Number(msg.sender_id) === Number(currentUid) && Number(msg.receiver_id) === Number(selectedUid))
+
+            // If activeConvRef is null or 0, update it for new conversations
+            if ((activeConvRef.current === null || activeConvRef.current === 0) && isRelevantForOpenChat) {
+                activeConvRef.current = msg.conversation_id
+                queryClient.invalidateQueries({ queryKey: [`conversation-${selectedUid}`] })
+                queryClient.invalidateQueries({ queryKey: ['conversations'] })
+                queryClient.invalidateQueries({ queryKey: [`messages-${selectedUid}`] })
             }
 
+            // If it is definitely for this open chat (by participant IDs or conversation ID)
+            const isForThisConversation =
+                msg.conversation_id === activeConvRef.current || isRelevantForOpenChat
+
             // wrong conversation is open — ignore completely, do NOT mark seen
-            if (msg.conversation_id !== activeConvRef.current) return
+            if (!isForThisConversation) return
+
+            // Ensure activeConvRef has the conversation ID
+            if (!activeConvRef.current && msg.conversation_id) {
+                activeConvRef.current = msg.conversation_id
+            }
 
             setMessages((prev) => {
                 // If it's our own message emitted back by server, reconcile pending optimistic message
-                if (msg.sender_id === currentUserId) {
+                if (Number(msg.sender_id) === Number(currentUid)) {
                     const pendingIndex = prev.findIndex(
-                        (m) => m.id < 0 && (m.content === msg.content || m.receiver_id === msg.receiver_id)
+                        (m) => m.id < 0 && (m.content === msg.content || Number(m.receiver_id) === Number(msg.receiver_id))
                     )
                     if (pendingIndex !== -1) {
                         const next = [...prev]
@@ -127,8 +139,7 @@ export const useChat = ({
             })
 
             // ✅ only mark seen if the sender is the person currently open
-            // if user_b is chatting with user_c, messages from user_a are NOT marked seen
-            if (msg.sender_id === selectedUserRef.current) {
+            if (Number(msg.sender_id) === Number(selectedUid)) {
                 socket.emit(CHAT_EVENTS.MARK_SEEN, {
                     conversationId: msg.conversation_id,
                     senderId: msg.sender_id,

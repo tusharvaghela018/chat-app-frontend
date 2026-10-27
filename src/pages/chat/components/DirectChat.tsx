@@ -464,17 +464,42 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
 
             const more = (messageData.data as any)?.hasMore ?? false
 
-            setMessages(msgs)
+            setMessages((prev) => {
+                // If we already have messages in state and the API returned empty, don't wipe active messages
+                if (prev.length > 0 && msgs.length === 0) {
+                    return prev
+                }
+                if (prev.length === 0) {
+                    return msgs
+                }
+                // Merge without dropping pending optimistic messages or newly received live messages
+                const serverIds = new Set(msgs.map((m: IMessage) => m.id))
+                const pendingOrNewer = prev.filter((m: IMessage) => m.id < 0 || !serverIds.has(m.id))
+                return [...msgs, ...pendingOrNewer]
+            })
             setHasMore(more)
 
-            const conversationId = msgs[0]?.conversation_id ?? null
-            activeConvRef.current = conversationId
-
-            if (conversationId && socket && !iBlocked && isAccepted) {
-                emitMarkSeen(conversationId, user.id)
+            const conversationId = msgs[0]?.conversation_id ?? conversation?.id ?? activeConvRef.current ?? null
+            if (conversationId) {
+                activeConvRef.current = conversationId
             }
         }
-    }, [messageData, socket, iBlocked, isAccepted, user.id])
+    }, [messageData])
+
+    // Keep activeConvRef in sync when conversation arrives
+    useEffect(() => {
+        if (conversation?.id && !activeConvRef.current) {
+            activeConvRef.current = conversation.id
+        }
+    }, [conversation?.id])
+
+    // Separate effect for mark seen so it doesn't cause messages to re-sync
+    useEffect(() => {
+        const convId = activeConvRef.current || conversation?.id
+        if (convId && socket && !iBlocked && isAccepted) {
+            emitMarkSeen(convId, user.id)
+        }
+    }, [conversation?.id, socket, iBlocked, isAccepted, user.id])
 
     // Instant synchronous scroll to bottom before paint on initial load
     useLayoutEffect(() => {
