@@ -9,6 +9,17 @@ let activeUserId: number | null = null;
 let isInitializing = false;
 const listeners = new Set<(s: Socket | null) => void>();
 
+// Immediately disconnect socket when browser tab or window is closed or navigated away
+if (typeof window !== "undefined") {
+    const handleUnload = () => {
+        if (globalSocket && globalSocket.connected) {
+            globalSocket.disconnect();
+        }
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener("pagehide", handleUnload);
+}
+
 export const useSocket = (): Socket | null => {
     const user = useSelector(getUser);
     const [socket, setSocket] = useState<Socket | null>(globalSocket);
