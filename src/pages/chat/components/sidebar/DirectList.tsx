@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Search, MessageSquare, ShieldAlert, Ban, Archive, ArchiveRestore, Phone, PhoneMissed, Video } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useGetApi } from "@/hooks/api"
@@ -118,6 +118,14 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
     const conversations = (convData?.data || []) as any[]
     const isFetching = isSearching ? isFetchingUsers : isFetchingConvs
 
+    const acceptedContactUserIds = useMemo(() => {
+        return new Set(
+            conversations
+                .filter((c) => c.status === "accepted")
+                .map((c) => (c.sender_id === authUser?.id ? c.receiver_id : c.sender_id))
+        )
+    }, [conversations, authUser?.id])
+
     const handleObserver = useCallback(
         (entries: IntersectionObserverEntry[]) => {
             if (entries[0].isIntersecting && isSearching && (userData?.data as any)?.hasMore && !isFetchingUsers) {
@@ -192,7 +200,7 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
                                     : "hover:bg-slate-100 dark:hover:bg-slate-800/50 text-slate-900 dark:text-slate-100"
                             }`}
                         >
-                            <UserAvatar user={user} isSelected={selectedUserId === user.id} />
+                            <UserAvatar user={user} isSelected={selectedUserId === user.id} isContact={acceptedContactUserIds.has(user.id)} />
                             <div className="min-w-0 flex-1">
                                 <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{user.name}</p>
                                 <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
@@ -223,7 +231,7 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
                                         : "hover:bg-slate-100 dark:hover:bg-slate-800/50 text-slate-900 dark:text-slate-100"
                                 }`}
                             >
-                                <UserAvatar user={otherUser} isSelected={isSelected} />
+                                <UserAvatar user={otherUser} isSelected={isSelected} isContact={conv.status === 'accepted'} />
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center justify-between gap-2 mb-0.5">
                                         <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{otherUser.name}</p>
@@ -302,9 +310,10 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
     )
 }
 
-const UserAvatar = ({ user, isSelected }: { user: IUser, isSelected: boolean }) => {
+const UserAvatar = ({ user, isSelected, isContact }: { user: IUser, isSelected: boolean, isContact?: boolean }) => {
     const { isUserOnline } = usePresence()
-    const isOnline = isUserOnline(user.id, user.is_online, user.last_seen_privacy)
+    const canSeePresence = user.last_seen_privacy === "everyone" || (user.last_seen_privacy === "contacts" && isContact)
+    const isOnline = isUserOnline(user.id, user.is_online, user.last_seen_privacy, isContact)
 
     return (
         <div className="relative flex-shrink-0">
@@ -318,7 +327,7 @@ const UserAvatar = ({ user, isSelected }: { user: IUser, isSelected: boolean }) 
                     : user.name[0].toUpperCase()
                 }
             </div>
-            {isOnline && (
+            {canSeePresence && isOnline && (
                 <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card bg-emerald-500 shadow-2xs" />
             )}
         </div>

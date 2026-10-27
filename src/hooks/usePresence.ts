@@ -80,15 +80,17 @@ export const usePresence = () => {
         }
     }, [socket])
 
-    const isUserOnline = (userId: number, initialOnline?: boolean, privacy?: string) => {
+    const isUserOnline = (userId: number, initialOnline?: boolean, privacy?: string, isContact?: boolean) => {
         if (privacy === "nobody") return false
+        if (privacy === "contacts" && isContact === false) return false
         if (globalOnlineUsers.has(userId)) return true
         if (globalOnlineUsers.size === 0 && initialOnline) return true
         return false
     }
 
-    const getUserLastSeen = (userId: number, fallbackLastSeen?: string | null, privacy?: string) => {
+    const getUserLastSeen = (userId: number, fallbackLastSeen?: string | null, privacy?: string, isContact?: boolean) => {
         if (privacy === "nobody") return null
+        if (privacy === "contacts" && isContact === false) return null
         return globalLastSeenMap.get(userId) || fallbackLastSeen || null
     }
 

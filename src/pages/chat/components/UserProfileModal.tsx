@@ -8,6 +8,7 @@ interface UserProfileModalProps {
     user: IUser
     isBlocked: boolean
     isOnline?: boolean
+    isContact?: boolean
     onToggleBlock: (block: boolean) => void
 }
 
@@ -17,9 +18,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     user,
     isBlocked,
     isOnline = false,
+    isContact = false,
     onToggleBlock,
 }) => {
     if (!open) return null
+
+    const canSeePresence = user.last_seen_privacy === "everyone" || (user.last_seen_privacy === "contacts" && isContact)
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -63,7 +67,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                             >
                                 <Ban size={14} className="stroke-[2.5]" />
                             </div>
-                        ) : user.last_seen_privacy === "nobody" ? null : isOnline ? (
+                        ) : !canSeePresence ? null : isOnline ? (
                             <div
                                 className="absolute bottom-0 right-0 h-6 w-6 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-800 shadow-sm"
                                 title="Online"
@@ -91,7 +95,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 border border-red-200/80 dark:border-red-900/50">
                                 <Ban size={12} className="stroke-[2.5]" /> Blocked
                             </span>
-                        ) : user.last_seen_privacy === "nobody" ? null : isOnline ? (
+                        ) : !canSeePresence ? null : isOnline ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-900/50">
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Online
                             </span>

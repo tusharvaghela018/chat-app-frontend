@@ -49,8 +49,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const { isUserOnline, getUserLastSeen, formatLastActive } = usePresence()
     const { startCall, callStatus } = useCall()
 
-    const isOnline = isUserOnline(user.id, user.is_online, user.last_seen_privacy)
-    const lastSeen = getUserLastSeen(user.id, user.last_seen, user.last_seen_privacy)
+
 
     const [input, setInput] = useState("")
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -140,6 +139,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const isPending = conversation?.status === 'pending'
     const isRejected = conversation?.status === 'rejected'
     const isAccepted = conversation?.status === 'accepted'
+
+    const isContact = isAccepted
+    const isOnline = isUserOnline(user.id, user.is_online, user.last_seen_privacy, isContact)
+    const lastSeen = getUserLastSeen(user.id, user.last_seen, user.last_seen_privacy, isContact)
+    const canSeePresence = user.last_seen_privacy === "everyone" || (user.last_seen_privacy === "contacts" && isAccepted)
 
     const isIRequester = conversation?.sender_id === authUser?.id
     const isIRecipient = conversation?.receiver_id === authUser?.id
@@ -752,11 +756,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             </div>
                             {iBlocked ? (
                                 <span className="absolute bottom-0 right-0 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-white dark:border-[#111827] bg-red-600 shadow-2xs" />
-                            ) : isOnline ? (
+                            ) : canSeePresence && isOnline ? (
                                 <span className="absolute bottom-0 right-0 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-white dark:border-[#111827] bg-emerald-500 shadow-2xs" />
-                            ) : (
+                            ) : canSeePresence ? (
                                 <span className="absolute bottom-0 right-0 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-white dark:border-[#111827] bg-slate-400 shadow-2xs" />
-                            )}
+                            ) : null}
                         </div>
                         <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 sm:gap-2">
@@ -773,7 +777,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                     </span>
                                 ) : isTyping ? (
                                     <span className="text-purple-600 dark:text-purple-400 font-semibold animate-pulse">typing...</span>
-                                ) : user.last_seen_privacy === "nobody" ? null : isOnline ? (
+                                ) : !canSeePresence ? null : isOnline ? (
                                     <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
                                         <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                                         Online
@@ -1530,6 +1534,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                 user={user}
                 isBlocked={!!iBlocked}
                 isOnline={isOnline}
+                isContact={isAccepted}
                 onToggleBlock={handleToggleBlock}
             />
         </div>
