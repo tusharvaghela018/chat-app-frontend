@@ -166,14 +166,21 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const searchInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
-        const handleDocumentClick = (e: MouseEvent) => {
+        const handleDocumentClick = (e: MouseEvent | TouchEvent) => {
             const target = e.target as HTMLElement
             if (!target.closest('.emoji-picker-container') && !target.closest('.epr-main')) {
                 setMoreEmojiMsgId(null)
+                if (!target.closest('[id^="group-msg-"]')) {
+                    setHoveredMsgId(null)
+                }
             }
         }
         document.addEventListener("mousedown", handleDocumentClick)
-        return () => document.removeEventListener("mousedown", handleDocumentClick)
+        document.addEventListener("touchstart", handleDocumentClick)
+        return () => {
+            document.removeEventListener("mousedown", handleDocumentClick)
+            document.removeEventListener("touchstart", handleDocumentClick)
+        }
     }, [])
 
     const [copiedId, setCopiedId] = useState<number | null>(null)
@@ -1125,6 +1132,16 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                             setHoveredMsgId(null)
                                         }
                                     }}
+                                    onClick={() => {
+                                        if (window.matchMedia("(pointer: coarse)").matches) {
+                                            if (hoveredMsgId === msg.id) {
+                                                setHoveredMsgId(null)
+                                                setMoreEmojiMsgId(null)
+                                            } else {
+                                                setHoveredMsgId(msg.id)
+                                            }
+                                        }
+                                    }}
                                     className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 transition-all duration-200 rounded-2xl ${
                                         isCurrentSearchMatch
                                             ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] scale-[1.01] p-1"
@@ -1160,6 +1177,8 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                                         onClick={(e) => {
                                                             e.stopPropagation()
                                                             handleToggleReaction(msg.id, emoji)
+                                                            setHoveredMsgId(null)
+                                                            setMoreEmojiMsgId(null)
                                                         }}
                                                         className="hover:scale-125 active:scale-95 transition-transform text-xs p-1"
                                                         title={`React with ${emoji}`}
@@ -1231,6 +1250,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                                         onEmojiClick={(emojiData: EmojiClickData) => {
                                                             handleToggleReaction(msg.id, emojiData.emoji)
                                                             setMoreEmojiMsgId(null)
+                                                            setHoveredMsgId(null)
                                                         }}
                                                         lazyLoadEmojis={true}
                                                         searchPlaceHolder="React with emoji..."
