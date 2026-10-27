@@ -39,9 +39,9 @@ export const useSocket = (): Socket | null => {
         const listener = (s: Socket | null) => setSocket(s);
         listeners.add(listener);
 
-        if (globalSocket && activeUserId === user.id && globalSocket.connected) {
+        if (globalSocket && activeUserId === user.id) {
             setSocket(globalSocket);
-        } else if (!isInitializing || activeUserId !== user.id) {
+        } else if (!isInitializing) {
             isInitializing = true;
             activeUserId = user.id;
 
@@ -63,6 +63,11 @@ export const useSocket = (): Socket | null => {
                     const newSocket = io(socketServerUrl, {
                         auth: { token },
                         withCredentials: true,
+                        reconnection: true,
+                        reconnectionAttempts: Infinity,
+                        reconnectionDelay: 1000,
+                        reconnectionDelayMax: 5000,
+                        timeout: 20000,
                     });
 
                     newSocket.on("connect", () => {

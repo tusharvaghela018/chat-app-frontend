@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { Socket } from "socket.io-client"
 import { useQueryClient } from "@tanstack/react-query"
 import { CHAT_EVENTS } from "@/pages/chat/constants"
@@ -36,6 +36,7 @@ export interface IMessage {
     created_at: string
     is_seen?: boolean
     is_pending?: boolean
+    status?: "pending" | "sent" | "failed"
     reactions?: IMessageReaction[]
     starred?: IStarredItem[]
 }
@@ -54,11 +55,33 @@ interface UseChatReturn {
     isTyping: boolean
     activeConvRef: React.MutableRefObject<number | null>
     sendMessage: (receiverId: number, content: string, optimisticMsg?: IMessage) => void
+    retryMessage: (msg: IMessage) => void
     emitMarkSeen: (conversationId: number, senderId: number) => void
     emitTypingStart: (receiverId: number) => void
     emitTypingStop: (receiverId: number) => void
     emitToggleReaction: (messageId: number, emoji: string, receiverId: number) => void
     emitToggleStar?: (messageId: number) => void
+}
+
+// Helper to update TanStack Query messages cache so messages never disappear on re-opening
+function updateQueryMessagesCache<T extends { id: number }>(
+    queryClient: any,
+    queryKey: string,
+    updater: (messages: T[]) => T[]
+) {
+    queryClient.setQueryData([queryKey], (old: any) => {
+        if (!old) return old
+        const currentMsgs = Array.isArray(old.data)
+            ? old.data
+            : (old.data?.messages || (Array.isArray(old) ? old : []))
+        const updated = updater(currentMsgs)
+        if (Array.isArray(old.data)) {
+            return { ...old, data: updated }
+        } else if (old.data?.messages) {
+            return { ...old, data: { ...old.data, messages: updated } }
+        }
+        return old
+    })
 }
 
 export const useChat = ({
@@ -85,6 +108,7 @@ export const useChat = ({
         selectedUserRef.current = selectedUserId
         activeConvRef.current = null // Reset conversation ID when switching users
         setIsTyping(false)  // reset typing when switching users
+        setMessages([])
     }, [selectedUserId])
 
     useEffect(() => {
@@ -105,7 +129,6 @@ export const useChat = ({
                 activeConvRef.current = msg.conversation_id
                 queryClient.invalidateQueries({ queryKey: [`conversation-${selectedUid}`] })
                 queryClient.invalidateQueries({ queryKey: ['conversations'] })
-                queryClient.invalidateQueries({ queryKey: [`messages-${selectedUid}`] })
             }
 
             // If it is definitely for this open chat (by participant IDs or conversation ID)
@@ -138,6 +161,19 @@ export const useChat = ({
                 return [...prev, msg]
             })
 
+            // Update TanStack Query cache so reopening the chat retains this message
+            if (selectedUid) {
+                updateQueryMessagesCache<IMessage>(queryClient, `messages-${selectedUid}`, (msgs) => {
+                    const idx = msgs.findIndex((m) => m.id === msg.id || (m.id < 0 && m.content === msg.content))
+                    if (idx !== -1) {
+                        const next = [...msgs]
+                        next[idx] = msg
+                        return next
+                    }
+                    return [...msgs, msg]
+                })
+            }
+
             // ✅ only mark seen if the sender is the person currently open
             if (Number(msg.sender_id) === Number(selectedUid)) {
                 socket.emit(CHAT_EVENTS.MARK_SEEN, {
@@ -159,6 +195,17 @@ export const useChat = ({
                     return { ...m, is_seen: true };
                 })
             )
+
+            const selectedUid = selectedUserRef.current
+            if (selectedUid) {
+                updateQueryMessagesCache<IMessage>(queryClient, `messages-${selectedUid}`, (msgs) => {
+                    return msgs.map((m) => {
+                        if (m.conversation_id !== conversationId) return m
+                        if (messageIds && !messageIds.includes(m.id)) return m
+                        return { ...m, is_seen: true }
+                    })
+                })
+            }
         }
 
         // ── typing ────────────────────────────────────────────────────────
@@ -178,6 +225,13 @@ export const useChat = ({
             setMessages((prev) =>
                 prev.map((m) => (m.id === messageId ? { ...m, reactions } : m))
             )
+
+            const selectedUid = selectedUserRef.current
+            if (selectedUid) {
+                updateQueryMessagesCache<IMessage>(queryClient, `messages-${selectedUid}`, (msgs) => {
+                    return msgs.map((m) => (m.id === messageId ? { ...m, reactions } : m))
+                })
+            }
         }
 
         // ── star updated ──────────────────────────────────────────────────
@@ -194,6 +248,22 @@ export const useChat = ({
                     return { ...m, starred: nextStarred }
                 })
             )
+
+            const selectedUid = selectedUserRef.current
+            if (selectedUid) {
+                updateQueryMessagesCache<IMessage>(queryClient, `messages-${selectedUid}`, (msgs) => {
+                    return msgs.map((m) => {
+                        if (Number(m.id) !== Number(messageId)) return m
+                        const current = m.starred || []
+                        const filtered = current.filter((s) => Number(s.user_id) !== Number(uid))
+                        const nextStarred = isStarred
+                            ? [...filtered, { user_id: Number(uid) || 0, message_id: Number(messageId) }]
+                            : filtered
+                        return { ...m, starred: nextStarred }
+                    })
+                })
+            }
+
             queryClient.invalidateQueries({ queryKey: ["starred-messages"] })
             queryClient.invalidateQueries({ queryKey: ["starred-messages-ids"] })
         }
@@ -213,16 +283,88 @@ export const useChat = ({
             socket.off(CHAT_EVENTS.REACTION_UPDATED, onReactionUpdated)
             socket.off(CHAT_EVENTS.STAR_UPDATED, onStarUpdated)
         }
-    }, [socket, currentUserId, onStatusUpdated])
+    }, [socket, currentUserId, onStatusUpdated, queryClient])
 
-    // ── emit helpers ──────────────────────────────────────────────────────
+    // ── emit helpers with Fast ACK & Auto-Retry ───────────────────────────
+
+    const emitSend = useCallback((targetMsg: IMessage) => {
+        if (!socket) return
+        socket.timeout(10000).emit(
+            CHAT_EVENTS.SEND_MESSAGE,
+            { receiverId: targetMsg.receiver_id, content: targetMsg.content },
+            (err: any, res: any) => {
+                if (err || (res && !res.success)) {
+                    setMessages((prev) =>
+                        prev.map((m) =>
+                            m.id === targetMsg.id ? { ...m, is_pending: false, status: "failed" } : m
+                        )
+                    )
+                } else if (res?.success && res?.message) {
+                    const serverMsg = res.message
+                    setMessages((prev) => {
+                        const idx = prev.findIndex((m) => m.id === targetMsg.id)
+                        if (idx !== -1) {
+                            const next = [...prev]
+                            next[idx] = { ...serverMsg, is_pending: false, status: "sent" }
+                            return next
+                        }
+                        return prev
+                    })
+
+                    const selectedUid = selectedUserRef.current
+                    if (selectedUid) {
+                        updateQueryMessagesCache<IMessage>(queryClient, `messages-${selectedUid}`, (msgs) => {
+                            if (msgs.some((m) => m.id === serverMsg.id)) return msgs
+                            return [...msgs, serverMsg]
+                        })
+                    }
+                }
+            }
+        )
+    }, [socket, queryClient])
 
     const sendMessage = (receiverId: number, content: string, optimisticMsg?: IMessage) => {
-        if (optimisticMsg) {
-            setMessages((prev) => [...prev, optimisticMsg])
+        const tempMsg: IMessage = optimisticMsg || {
+            id: -Date.now(),
+            content,
+            sender_id: currentUserIdRef.current ?? 0,
+            receiver_id: receiverId,
+            conversation_id: activeConvRef.current || 0,
+            created_at: new Date().toISOString(),
+            is_pending: true,
+            status: "pending",
         }
-        socket?.emit(CHAT_EVENTS.SEND_MESSAGE, { receiverId, content })
+        setMessages((prev) => {
+            if (prev.some((m) => m.id === tempMsg.id)) return prev
+            return [...prev, { ...tempMsg, is_pending: true, status: "pending" }]
+        })
+        emitSend(tempMsg)
     }
+
+    const retryMessage = (msg: IMessage) => {
+        setMessages((prev) =>
+            prev.map((m) => (m.id === msg.id ? { ...m, is_pending: true, status: "pending" } : m))
+        )
+        emitSend(msg)
+    }
+
+    // Auto-flush pending messages when socket reconnects
+    useEffect(() => {
+        if (!socket) return
+
+        const onConnect = () => {
+            setMessages((prev) => {
+                const pendingMsgs = prev.filter((m) => m.id < 0 && m.status !== "failed")
+                pendingMsgs.forEach((msg) => emitSend(msg))
+                return prev
+            })
+        }
+
+        socket.on("connect", onConnect)
+        return () => {
+            socket.off("connect", onConnect)
+        }
+    }, [socket, emitSend])
 
     const emitMarkSeen = (conversationId: number, senderId: number) => {
         socket?.emit(CHAT_EVENTS.MARK_SEEN, { conversationId, senderId })
@@ -250,6 +392,7 @@ export const useChat = ({
         isTyping,
         activeConvRef,
         sendMessage,
+        retryMessage,
         emitMarkSeen,
         emitTypingStart,
         emitTypingStop,
@@ -267,6 +410,7 @@ export interface IGroupMessage {
     encrypted_keys?: Record<number, EncryptedMessage>
     created_at: string
     is_pending?: boolean
+    status?: "pending" | "sent" | "failed"
     sender?: {
         id: number
         name: string
@@ -318,6 +462,17 @@ export const useGroupChat = ({ socket, groupId, currentUserId, initialMessages, 
                 }
                 if (prev.some((m) => m.id === message.id)) return prev
                 return [...prev, message]
+            })
+
+            // Update TanStack Query cache for group messages
+            updateQueryMessagesCache<IGroupMessage>(queryClient, `group-messages-${groupId}`, (msgs) => {
+                const idx = msgs.findIndex((m) => m.id === message.id || (m.id < 0 && m.content === message.content))
+                if (idx !== -1) {
+                    const next = [...msgs]
+                    next[idx] = message
+                    return next
+                }
+                return [...msgs, message]
             })
         }
 
@@ -378,6 +533,10 @@ export const useGroupChat = ({ socket, groupId, currentUserId, initialMessages, 
             setMessages((prev) =>
                 prev.map((m) => (m.id === groupMessageId ? { ...m, reactions } : m))
             )
+
+            updateQueryMessagesCache<IGroupMessage>(queryClient, `group-messages-${groupId}`, (msgs) => {
+                return msgs.map((m) => (m.id === groupMessageId ? { ...m, reactions } : m))
+            })
         }
 
         // ── star updated ──────────────────────────────────────────────────
@@ -403,6 +562,19 @@ export const useGroupChat = ({ socket, groupId, currentUserId, initialMessages, 
                     return { ...m, starred: nextStarred }
                 })
             )
+
+            updateQueryMessagesCache<IGroupMessage>(queryClient, `group-messages-${groupId}`, (msgs) => {
+                return msgs.map((m) => {
+                    if (Number(m.id) !== Number(groupMessageId)) return m
+                    const current = m.starred || []
+                    const filtered = current.filter((s) => Number(s.user_id) !== Number(uid))
+                    const nextStarred = isStarred
+                        ? [...filtered, { user_id: Number(uid) || 0, group_message_id: Number(groupMessageId) }]
+                        : filtered
+                    return { ...m, starred: nextStarred }
+                })
+            })
+
             queryClient.invalidateQueries({ queryKey: ["starred-messages"] })
             queryClient.invalidateQueries({ queryKey: ["starred-messages-ids"] })
         }
@@ -422,7 +594,7 @@ export const useGroupChat = ({ socket, groupId, currentUserId, initialMessages, 
             socket.off(GROUP_EVENTS.REACTION_UPDATED, handleReactionUpdated)
             socket.off(GROUP_EVENTS.STAR_UPDATED, handleStarUpdated)
         }
-    }, [socket, groupId])
+    }, [socket, groupId, queryClient])
 
     // ── reset when group changes ──────────────────────────────────────────
     useEffect(() => {
@@ -430,14 +602,85 @@ export const useGroupChat = ({ socket, groupId, currentUserId, initialMessages, 
         setTypingUsers([])
     }, [groupId])
 
-    // ── send message ──────────────────────────────────────────────────────
+    // ── send message with Fast ACK & Auto-Retry ───────────────────────────
+
+    const emitGroupSend = useCallback((targetMsg: IGroupMessage) => {
+        if (!socket) return
+        socket.timeout(10000).emit(
+            GROUP_EVENTS.SEND_MESSAGE,
+            { groupId: targetMsg.group_id, content: targetMsg.content, encrypted_keys: targetMsg.encrypted_keys },
+            (err: any, res: any) => {
+                if (err || (res && !res.success)) {
+                    setMessages((prev) =>
+                        prev.map((m) =>
+                            m.id === targetMsg.id ? { ...m, is_pending: false, status: "failed" } : m
+                        )
+                    )
+                } else if (res?.success && res?.message) {
+                    const serverMsg = res.message
+                    setMessages((prev) => {
+                        const idx = prev.findIndex((m) => m.id === targetMsg.id)
+                        if (idx !== -1) {
+                            const next = [...prev]
+                            next[idx] = { ...serverMsg, is_pending: false, status: "sent" }
+                            return next
+                        }
+                        return prev
+                    })
+
+                    updateQueryMessagesCache<IGroupMessage>(queryClient, `group-messages-${targetMsg.group_id}`, (msgs) => {
+                        if (msgs.some((m) => m.id === serverMsg.id)) return msgs
+                        return [...msgs, serverMsg]
+                    })
+                }
+            }
+        )
+    }, [socket, queryClient])
+
     const sendMessage = (content: string, encrypted_keys?: any, optimisticMsg?: IGroupMessage) => {
-        if (!socket || !content.trim()) return
-        if (optimisticMsg) {
-            setMessages((prev) => [...prev, optimisticMsg])
+        if (!content.trim()) return
+        const tempMsg: IGroupMessage = optimisticMsg || {
+            id: -Date.now(),
+            group_id: groupId,
+            sender_id: currentUserIdRef.current ?? null,
+            content,
+            type: "text",
+            encrypted_keys,
+            created_at: new Date().toISOString(),
+            is_pending: true,
+            status: "pending",
         }
-        socket.emit(GROUP_EVENTS.SEND_MESSAGE, { groupId, content, encrypted_keys })
+        setMessages((prev) => {
+            if (prev.some((m) => m.id === tempMsg.id)) return prev
+            return [...prev, { ...tempMsg, is_pending: true, status: "pending" }]
+        })
+        emitGroupSend(tempMsg)
     }
+
+    const retryMessage = (msg: IGroupMessage) => {
+        setMessages((prev) =>
+            prev.map((m) => (m.id === msg.id ? { ...m, is_pending: true, status: "pending" } : m))
+        )
+        emitGroupSend(msg)
+    }
+
+    // Auto-flush pending messages when socket reconnects
+    useEffect(() => {
+        if (!socket) return
+
+        const onConnect = () => {
+            setMessages((prev) => {
+                const pendingMsgs = prev.filter((m) => m.id < 0 && m.status !== "failed")
+                pendingMsgs.forEach((msg) => emitGroupSend(msg))
+                return prev
+            })
+        }
+
+        socket.on("connect", onConnect)
+        return () => {
+            socket.off("connect", onConnect)
+        }
+    }, [socket, emitGroupSend])
 
     // ── mark seen ─────────────────────────────────────────────────────────
     const markSeen = (messageIds: number[]) => {
@@ -471,6 +714,7 @@ export const useGroupChat = ({ socket, groupId, currentUserId, initialMessages, 
         setMessages,
         typingUsers,
         sendMessage,
+        retryMessage,
         markSeen,
         emitTypingStart,
         emitTypingStop,

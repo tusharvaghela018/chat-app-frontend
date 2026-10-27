@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } from "react"
 import { useSelector } from "react-redux"
-import { 
-    User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert, 
-    Ban, Check, UserMinus, Loader2, Video, Phone, Search, 
+import {
+    User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert,
+    Ban, Check, UserMinus, Loader2, Video, Phone, Search,
     Smile, CheckCheck, Copy, Archive, ArchiveRestore, Star, MoreHorizontal,
-    ChevronUp, ChevronDown
+    ChevronUp, ChevronDown, Clock, AlertCircle
 } from "lucide-react"
 import { useGetApi, usePatchApi } from "@/hooks/api"
 import axiosInstance from "@/api/axios"
@@ -62,6 +62,13 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const isInitialScrollDone = useRef(false)
     const lastMessageIdRef = useRef<number | null>(null)
     const decryptCache = useRef<Map<string, string | null>>(new Map())
+    const [isChatReady, setIsChatReady] = useState(false)
+
+    useEffect(() => {
+        isInitialScrollDone.current = false
+        lastMessageIdRef.current = null
+        setIsChatReady(false)
+    }, [user.id])
 
     const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null)
     const [moreEmojiMsgId, setMoreEmojiMsgId] = useState<number | null>(null)
@@ -187,7 +194,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         {
             queryKey: `messages-${user.id}`,
             enabled: !!user.id,
-            staleTime: 30 * 1000,
+            staleTime: 0,
         }
     )
 
@@ -201,6 +208,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         isTyping,
         activeConvRef,
         sendMessage,
+        retryMessage,
         emitMarkSeen,
         emitTypingStart,
         emitTypingStop,
@@ -411,7 +419,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                         textToSearch = parsed.name || parsed.caption || content
                     }
                 }
-            } catch {}
+            } catch { }
             if (textToSearch.toLowerCase().includes(q)) {
                 ids.push(m.id)
             }
@@ -516,7 +524,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                 container.scrollTop = container.scrollHeight
                 isInitialScrollDone.current = true
                 lastMessageIdRef.current = messages[messages.length - 1]?.id ?? null
+                setIsChatReady(true)
             }
+        } else if (messages.length === 0) {
+            setIsChatReady(true)
         }
     }, [messages])
 
@@ -529,6 +540,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                     container.scrollTop = container.scrollHeight
                     isInitialScrollDone.current = true
                     lastMessageIdRef.current = messages[messages.length - 1]?.id ?? null
+                    setIsChatReady(true)
                 }
             })
             return () => cancelAnimationFrame(raf)
@@ -599,6 +611,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         if (!container || !isInitialScrollDone.current) return
 
         const lastMessage = messages[messages.length - 1]
+        if (lastMessageIdRef.current === null) {
+            lastMessageIdRef.current = lastMessage?.id ?? null
+            return
+        }
+
         const isNewLastMessage = lastMessage && lastMessage.id !== lastMessageIdRef.current
         lastMessageIdRef.current = lastMessage?.id ?? null
 
@@ -643,6 +660,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             created_at: new Date().toISOString(),
             is_seen: false,
             is_pending: true,
+            status: "pending",
         }
 
         sendMessage(user.id, finalContent, optimisticMsg)
@@ -855,11 +873,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                     <button
                         type="button"
                         onClick={() => handleToggleBlock(!iBlocked)}
-                        className={`p-2 rounded-full transition-all ${
-                            iBlocked
+                        className={`p-2 rounded-full transition-all ${iBlocked
                                 ? "text-red-600 bg-red-100/90 dark:bg-red-950/70 ring-1 ring-red-400/60 shadow-2xs hover:bg-red-200 dark:hover:bg-red-900/60"
                                 : "text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
-                        }`}
+                            }`}
                         title={iBlocked ? "Unblock user" : "Block user"}
                         aria-label={iBlocked ? "Unblock user" : "Block user"}
                     >
@@ -871,11 +888,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                         <button
                             type="button"
                             onClick={() => setShowMoreMenu((prev) => !prev)}
-                            className={`header-more-btn p-2 rounded-full transition-colors ${
-                                showMoreMenu
+                            className={`header-more-btn p-2 rounded-full transition-colors ${showMoreMenu
                                     ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
                                     : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
-                            }`}
+                                }`}
                             title="More options"
                             aria-label="More options"
                         >
@@ -1054,7 +1070,9 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             {/* messages scroll stream */}
             <div
                 ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4 custom-scrollbar"
+                className={`flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4 custom-scrollbar transition-opacity duration-150 ${
+                    isChatReady || messages.length === 0 ? "opacity-100" : "opacity-0"
+                }`}
             >
                 <div ref={topRef} className="h-1" />
 
@@ -1075,7 +1093,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                     </p>
                 </div>
 
-                {(isFetching && messages.length === 0) ? (
+                {(isFetching && messages.length === 0 && initialMsgs.length === 0) ? (
                     <div className="flex-1 space-y-3 p-2 animate-in fade-in duration-300">
                         {[1, 2, 3, 4, 5, 6].map((i) => (
                             <div key={i} className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}>
@@ -1123,7 +1141,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                 ) {
                                     richPayload = JSON.parse(decryptedContent)
                                 }
-                            } catch {}
+                            } catch { }
 
                             if (richPayload?.type === "call_log") {
                                 const isCurrentSearchMatch = isSearchOpen && matchingMessageIds.length > 0 && matchingMessageIds[currentMatchIndex] === msg.id
@@ -1132,13 +1150,12 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                     <div
                                         key={msg.id}
                                         id={`direct-msg-${msg.id}`}
-                                        className={`transition-all rounded-2xl ${
-                                            isCurrentSearchMatch
+                                        className={`transition-all rounded-2xl ${isCurrentSearchMatch
                                                 ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] p-1"
                                                 : isSearchMatch
                                                     ? "bg-purple-500/5 ring-1 ring-purple-400/40 p-1"
                                                     : ""
-                                        }`}
+                                            }`}
                                     >
                                         <CallLogBubble
                                             payload={richPayload as any}
@@ -1185,13 +1202,12 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                             }
                                         }
                                     }}
-                                    className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 transition-all duration-200 rounded-2xl ${
-                                        isCurrentSearchMatch
+                                    className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 transition-all duration-200 rounded-2xl ${isCurrentSearchMatch
                                             ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] scale-[1.01] p-1"
                                             : isSearchMatch
                                                 ? "bg-purple-500/5 ring-1 ring-purple-400/40 p-1"
                                                 : ""
-                                    } ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
+                                        } ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
                                 >
                                     {/* Left avatar for received messages matching mockup */}
                                     {!isMine && (
@@ -1205,203 +1221,213 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                     )}
 
                                     <div className={`group relative flex flex-col ${isMine ? "items-end" : "items-start"} max-w-[85%] sm:max-w-md`}>
-                                                
-                                                {/* floating hover action toolbar */}
-                                                <div className={`absolute -top-4 ${
-                                                    isMine ? "right-2" : "left-2"
-                                                } z-30 transition-all duration-150 emoji-picker-container ${
-                                                    isHovered
-                                                        ? "opacity-100 pointer-events-auto scale-100"
-                                                        : "opacity-0 pointer-events-none scale-95"
-                                                }`}>
-                                                    <div className="flex items-center gap-0.5 bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-md border border-slate-200 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-md">
-                                                        {COMMON_EMOJIS.map(emoji => (
-                                                            <button
-                                                                key={emoji}
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    handleToggleReaction(msg.id, emoji)
-                                                                    setHoveredMsgId(null)
-                                                                    setMoreEmojiMsgId(null)
-                                                                }}
-                                                                className="hover:scale-125 active:scale-95 transition-transform text-xs p-1"
-                                                                title={`React with ${emoji}`}
-                                                            >
-                                                                {emoji}
-                                                            </button>
-                                                        ))}
 
-                                                        {/* +Emoji icon button */}
+                                        {/* floating hover action toolbar */}
+                                        <div className={`absolute -top-4 ${isMine ? "right-2" : "left-2"
+                                            } z-30 transition-all duration-150 emoji-picker-container ${isHovered
+                                                ? "opacity-100 pointer-events-auto scale-100"
+                                                : "opacity-0 pointer-events-none scale-95"
+                                            }`}>
+                                            <div className="flex items-center gap-0.5 bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-md border border-slate-200 dark:border-slate-700/80 rounded-full px-1.5 py-0.5 shadow-md">
+                                                {COMMON_EMOJIS.map(emoji => (
+                                                    <button
+                                                        key={emoji}
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            handleToggleReaction(msg.id, emoji)
+                                                            setHoveredMsgId(null)
+                                                            setMoreEmojiMsgId(null)
+                                                        }}
+                                                        className="hover:scale-125 active:scale-95 transition-transform text-xs p-1"
+                                                        title={`React with ${emoji}`}
+                                                    >
+                                                        {emoji}
+                                                    </button>
+                                                ))}
+
+                                                {/* +Emoji icon button */}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setMoreEmojiMsgId(moreEmojiMsgId === msg.id ? null : msg.id)
+                                                    }}
+                                                    className={`p-1 rounded-full transition-colors flex items-center justify-center ${moreEmojiMsgId === msg.id
+                                                            ? "text-purple-600 bg-purple-100 dark:bg-purple-900/40"
+                                                            : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"
+                                                        }`}
+                                                    title="Add custom reaction"
+                                                >
+                                                    <Smile size={13} />
+                                                    <span className="text-[10px] font-bold leading-none -ml-0.5">+</span>
+                                                </button>
+
+                                                {!isMedia && (
+                                                    <>
+                                                        <div className="h-3 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
                                                         <button
                                                             type="button"
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
-                                                                setMoreEmojiMsgId(moreEmojiMsgId === msg.id ? null : msg.id)
+                                                                handleCopyText(msg.id, decryptedContent)
                                                             }}
-                                                            className={`p-1 rounded-full transition-colors flex items-center justify-center ${
-                                                                moreEmojiMsgId === msg.id
-                                                                    ? "text-purple-600 bg-purple-100 dark:bg-purple-900/40"
-                                                                    : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"
-                                                            }`}
-                                                            title="Add custom reaction"
+                                                            className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors"
+                                                            title="Copy text"
                                                         >
-                                                            <Smile size={13} />
-                                                            <span className="text-[10px] font-bold leading-none -ml-0.5">+</span>
+                                                            {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
                                                         </button>
+                                                    </>
+                                                )}
 
-                                                        {!isMedia && (
-                                                            <>
-                                                                <div className="h-3 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation()
-                                                                        handleCopyText(msg.id, decryptedContent)
-                                                                    }}
-                                                                    className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors"
-                                                                    title="Copy text"
-                                                                >
-                                                                    {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                                                                </button>
-                                                            </>
-                                                        )}
+                                                {/* Star message button */}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        handleToggleStar(msg.id)
+                                                    }}
+                                                    className={`p-1 rounded-full transition-colors flex items-center justify-center ${isStarred
+                                                            ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/40"
+                                                            : "text-slate-400 hover:text-amber-500 dark:hover:text-amber-400"
+                                                        }`}
+                                                    title={isStarred ? "Unstar message" : "Star message"}
+                                                >
+                                                    <Star size={12} className={isStarred ? "fill-amber-400 text-amber-500" : ""} />
+                                                </button>
+                                            </div>
 
-                                                        {/* Star message button */}
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                handleToggleStar(msg.id)
-                                                            }}
-                                                            className={`p-1 rounded-full transition-colors flex items-center justify-center ${
-                                                                isStarred
-                                                                    ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/40"
-                                                                    : "text-slate-400 hover:text-amber-500 dark:hover:text-amber-400"
-                                                            }`}
-                                                            title={isStarred ? "Unstar message" : "Star message"}
-                                                        >
-                                                            <Star size={12} className={isStarred ? "fill-amber-400 text-amber-500" : ""} />
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Full Emoji Picker Popover for reactions */}
-                                                    {moreEmojiMsgId === msg.id && (
-                                                        <div className={`absolute top-full mt-2 ${
-                                                            isMine ? "right-0" : "left-0"
-                                                        } z-50 shadow-2xl rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-150`}>
-                                                            <EmojiPicker
-                                                                theme={document.documentElement.classList.contains("dark") ? Theme.DARK : Theme.LIGHT}
-                                                                onEmojiClick={(emojiData: EmojiClickData) => {
-                                                                    handleToggleReaction(msg.id, emojiData.emoji)
-                                                                    setMoreEmojiMsgId(null)
-                                                                    setHoveredMsgId(null)
-                                                                }}
-                                                                lazyLoadEmojis={true}
-                                                                searchPlaceHolder="React with emoji..."
-                                                                width={300}
-                                                                height={380}
-                                                            />
-                                                        </div>
-                                                    )}
+                                            {/* Full Emoji Picker Popover for reactions */}
+                                            {moreEmojiMsgId === msg.id && (
+                                                <div className={`absolute top-full mt-2 ${isMine ? "right-0" : "left-0"
+                                                    } z-50 shadow-2xl rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-150`}>
+                                                    <EmojiPicker
+                                                        theme={document.documentElement.classList.contains("dark") ? Theme.DARK : Theme.LIGHT}
+                                                        onEmojiClick={(emojiData: EmojiClickData) => {
+                                                            handleToggleReaction(msg.id, emojiData.emoji)
+                                                            setMoreEmojiMsgId(null)
+                                                            setHoveredMsgId(null)
+                                                        }}
+                                                        lazyLoadEmojis={true}
+                                                        searchPlaceHolder="React with emoji..."
+                                                        width={300}
+                                                        height={380}
+                                                    />
                                                 </div>
+                                            )}
+                                        </div>
 
-                                                {/* bubble */}
-                                                <div className="relative inline-block">
-                                                    {isImage ? (
-                                                        <ImageBubble
-                                                            url={richPayload!.url!}
-                                                            name={richPayload?.name || "Photo"}
-                                                            size={richPayload?.size}
-                                                            isMine={isMine}
-                                                            createdAt={msg.created_at}
-                                                            isSeen={msg.is_seen}
-                                                            isPending={msg.id < 0 || msg.is_pending}
-                                                            isStarred={isStarred}
-                                                        />
-                                                    ) : isAudio ? (
-                                                        <AudioPlayerBubble
-                                                            url={richPayload!.url!}
-                                                            duration={richPayload?.duration}
-                                                            isMine={isMine}
-                                                            createdAt={msg.created_at}
-                                                            isSeen={msg.is_seen}
-                                                            isPending={msg.id < 0 || msg.is_pending}
-                                                            isStarred={isStarred}
-                                                        />
-                                                    ) : isDoc ? (
-                                                        <DocumentCard
-                                                            url={richPayload!.url!}
-                                                            name={richPayload?.name || "Attachment"}
-                                                            size={richPayload?.size}
-                                                            isMine={isMine}
-                                                            createdAt={msg.created_at}
-                                                            isSeen={msg.is_seen}
-                                                            isPending={msg.id < 0 || msg.is_pending}
-                                                            isStarred={isStarred}
-                                                        />
-                                                    ) : (
-                                                        <div className={`relative px-4 py-2.5 text-sm break-words shadow-xs ${
-                                                            isMine
-                                                                ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
-                                                                : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
+                                        {/* bubble */}
+                                        <div className="relative inline-block">
+                                            {isImage ? (
+                                                <ImageBubble
+                                                    url={richPayload!.url!}
+                                                    name={richPayload?.name || "Photo"}
+                                                    size={richPayload?.size}
+                                                    isMine={isMine}
+                                                    createdAt={msg.created_at}
+                                                    isSeen={msg.is_seen}
+                                                    isPending={msg.id < 0 || msg.is_pending}
+                                                    isStarred={isStarred}
+                                                />
+                                            ) : isAudio ? (
+                                                <AudioPlayerBubble
+                                                    url={richPayload!.url!}
+                                                    duration={richPayload?.duration}
+                                                    isMine={isMine}
+                                                    createdAt={msg.created_at}
+                                                    isSeen={msg.is_seen}
+                                                    isPending={msg.id < 0 || msg.is_pending}
+                                                    isStarred={isStarred}
+                                                />
+                                            ) : isDoc ? (
+                                                <DocumentCard
+                                                    url={richPayload!.url!}
+                                                    name={richPayload?.name || "Attachment"}
+                                                    size={richPayload?.size}
+                                                    isMine={isMine}
+                                                    createdAt={msg.created_at}
+                                                    isSeen={msg.is_seen}
+                                                    isPending={msg.id < 0 || msg.is_pending}
+                                                    isStarred={isStarred}
+                                                />
+                                            ) : (
+                                                <div className={`relative px-4 py-2.5 text-sm break-words shadow-xs ${isMine
+                                                        ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
+                                                        : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
+                                                    }`}>
+                                                    <RichTextRenderer content={decryptedContent} isMine={isMine} />
+
+                                                    <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] tabular-nums ${isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
                                                         }`}>
-                                                            <RichTextRenderer content={decryptedContent} isMine={isMine} />
-                                                            
-                                                            <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] tabular-nums ${
-                                                                isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
-                                                            }`}>
-                                                                <span>
-                                                                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                </span>
-                                                                {isStarred && (
-                                                                    <Star size={10} className="fill-amber-400 text-amber-400 inline shrink-0 ml-0.5" />
-                                                                )}
-                                                                {isMine && (
-                                                                    <span className="ml-0.5">
-                                                                        {msg.id < 0 || msg.is_pending ? (
-                                                                            <span className="inline-block animate-pulse text-[9px]">●</span>
-                                                                        ) : msg.is_seen ? (
-                                                                            <CheckCheck size={13} className="inline text-purple-200" />
-                                                                        ) : (
-                                                                            <Check size={13} className="inline text-purple-200" />
-                                                                        )}
+                                                        <span>
+                                                            {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                        {isStarred && (
+                                                            <Star size={10} className="fill-amber-400 text-amber-400 inline shrink-0 ml-0.5" />
+                                                        )}
+                                                        {isMine && (
+                                                            <span className="ml-0.5 inline-flex items-center">
+                                                                {msg.status === "failed" ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            retryMessage(msg)
+                                                                        }}
+                                                                        className="inline-flex items-center gap-0.5 text-[10px] text-red-300 hover:text-red-100 font-semibold cursor-pointer"
+                                                                        title="Failed to send. Tap to retry."
+                                                                    >
+                                                                        <AlertCircle size={11} className="text-red-400" />
+                                                                        <span>Retry</span>
+                                                                    </button>
+                                                                ) : msg.id < 0 || msg.is_pending || msg.status === "pending" ? (
+                                                                    <span title="Sending...">
+                                                                        <Clock size={11} className="inline text-purple-200/80 animate-pulse" />
+                                                                    </span>
+                                                                ) : msg.is_seen ? (
+                                                                    <span title="Seen">
+                                                                        <CheckCheck size={13} className="inline text-purple-200" />
+                                                                    </span>
+                                                                ) : (
+                                                                    <span title="Sent">
+                                                                        <Check size={13} className="inline text-purple-200" />
                                                                     </span>
                                                                 )}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* Attached reaction pill docked below bubble */}
-                                                {msgAggReactions.length > 0 && (
-                                                    <div className={`relative z-20 -mt-2.5 flex items-center ${
-                                                        isMine ? "mr-1.5 justify-end" : "ml-1.5 justify-start"
-                                                    } max-w-full`}>
-                                                        <div className="flex flex-wrap items-center gap-1 bg-white/95 dark:bg-[#1a233a]/95 border border-slate-200/90 dark:border-slate-700/80 rounded-full px-2.5 py-0.5 shadow-sm backdrop-blur-md max-w-full">
-                                                            {msgAggReactions.map(({ emoji, count, hasReacted }) => (
-                                                                <button
-                                                                    key={emoji}
-                                                                    type="button"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation()
-                                                                        handleToggleReaction(msg.id, emoji)
-                                                                    }}
-                                                                    className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full transition-transform hover:scale-110 active:scale-95 ${
-                                                                        hasReacted
-                                                                            ? "bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-bold"
-                                                                            : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                                                                    }`}
-                                                                    title={hasReacted ? `You reacted with ${emoji} (click to remove)` : `Reacted with ${emoji}`}
-                                                                >
-                                                                    <span className="text-sm leading-none">{emoji}</span>
-                                                                    {count > 1 && <span className="text-[10px] font-semibold">{count}</span>}
-                                                                </button>
-                                                            ))}
-                                                        </div>
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Attached reaction pill docked below bubble */}
+                                        {msgAggReactions.length > 0 && (
+                                            <div className={`relative z-20 -mt-2.5 flex items-center ${isMine ? "mr-1.5 justify-end" : "ml-1.5 justify-start"
+                                                } max-w-full`}>
+                                                <div className="flex flex-wrap items-center gap-1 bg-white/95 dark:bg-[#1a233a]/95 border border-slate-200/90 dark:border-slate-700/80 rounded-full px-2.5 py-0.5 shadow-sm backdrop-blur-md max-w-full">
+                                                    {msgAggReactions.map(({ emoji, count, hasReacted }) => (
+                                                        <button
+                                                            key={emoji}
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleToggleReaction(msg.id, emoji)
+                                                            }}
+                                                            className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full transition-transform hover:scale-110 active:scale-95 ${hasReacted
+                                                                    ? "bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-bold"
+                                                                    : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                                                }`}
+                                                            title={hasReacted ? `You reacted with ${emoji} (click to remove)` : `Reacted with ${emoji}`}
+                                                        >
+                                                            <span className="text-sm leading-none">{emoji}</span>
+                                                            {count > 1 && <span className="text-[10px] font-semibold">{count}</span>}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
+                                        )}
+                                    </div>
                                 </div>
                             )
                         })}
@@ -1563,8 +1589,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                     iBlocked
                                         ? "You have blocked this user"
                                         : iAmRejected
-                                        ? "You cannot send messages to this user"
-                                        : undefined
+                                            ? "You cannot send messages to this user"
+                                            : undefined
                                 }
                             />
                         )}

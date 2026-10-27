@@ -4,7 +4,7 @@ import {
     Shield, ShieldOff, LogOut, ChevronRight, Link2, Check, 
     Copy, ChevronLeft, X, Lock, Loader2, Video, Phone, Search, 
     Smile, Star, ChevronUp, ChevronDown, Camera, Pencil, Settings, 
-    FileText, Image as ImageIcon 
+    FileText, Image as ImageIcon, Clock, AlertCircle
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
@@ -155,6 +155,13 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const isInitialScrollDone = useRef(false)
     const lastMessageIdRef = useRef<number | null>(null)
     const decryptCache = useRef<Map<string, string | null>>(new Map())
+    const [isChatReady, setIsChatReady] = useState(false)
+
+    useEffect(() => {
+        isInitialScrollDone.current = false
+        lastMessageIdRef.current = null
+        setIsChatReady(false)
+    }, [group.id])
 
     const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null)
     const [moreEmojiMsgId, setMoreEmojiMsgId] = useState<number | null>(null)
@@ -240,7 +247,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const { data: messagesData, isFetching, isSuccess } = useGetApi<{ messages: IGroupMessage[], hasMore: boolean }>(
         `/groups/${group.id}/messages`,
         { limit: 30 },
-        { queryKey: `group-messages-${group.id}`, enabled: true, staleTime: 30 * 1000 }
+        { queryKey: `group-messages-${group.id}`, enabled: true, staleTime: 0 }
     )
 
     const initialMsgs = (messagesData?.data as any)?.messages ?? []
@@ -250,6 +257,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         setMessages,
         typingUsers,
         sendMessage,
+        retryMessage,
         markSeen,
         emitTypingStart,
         emitTypingStop,
@@ -482,7 +490,10 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                 container.scrollTop = container.scrollHeight
                 isInitialScrollDone.current = true
                 lastMessageIdRef.current = messages[messages.length - 1]?.id ?? null
+                setIsChatReady(true)
             }
+        } else if (messages.length === 0) {
+            setIsChatReady(true)
         }
     }, [messages])
 
@@ -495,6 +506,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                     container.scrollTop = container.scrollHeight
                     isInitialScrollDone.current = true
                     lastMessageIdRef.current = messages[messages.length - 1]?.id ?? null
+                    setIsChatReady(true)
                 }
             })
             return () => cancelAnimationFrame(raf)
@@ -563,6 +575,11 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         if (!container || !isInitialScrollDone.current) return
 
         const lastMessage = messages[messages.length - 1]
+        if (lastMessageIdRef.current === null) {
+            lastMessageIdRef.current = lastMessage?.id ?? null
+            return
+        }
+
         const isNewLastMessage = lastMessage && lastMessage.id !== lastMessageIdRef.current
         lastMessageIdRef.current = lastMessage?.id ?? null
 
@@ -623,6 +640,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             encrypted_keys: encryptedKeys,
             created_at: new Date().toISOString(),
             is_pending: true,
+            status: "pending",
             sender: {
                 id: authUser?.id ?? 0,
                 name: authUser?.name ?? "Me",
@@ -1024,7 +1042,9 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             {/* messages area */}
             <div 
                 ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4 custom-scrollbar"
+                className={`flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4 custom-scrollbar transition-opacity duration-150 ${
+                    isChatReady || messages.length === 0 ? "opacity-100" : "opacity-0"
+                }`}
             >
                 <div ref={topRef} className="h-1" />
                 
@@ -1047,7 +1067,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                     </div>
                 </div>
 
-                {(isFetching && messages.length === 0) ? (
+                {(isFetching && messages.length === 0 && initialMsgs.length === 0) ? (
                     <div className="flex-1 space-y-3 p-2 animate-in fade-in duration-300">
                         {[1, 2, 3, 4, 5, 6].map((i) => (
                             <div key={i} className={`flex ${i % 3 === 0 ? "justify-end" : "justify-start"}`}>
@@ -1311,6 +1331,32 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                                         <span>{new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                                         {isStarred && (
                                                             <Star size={10} className="fill-amber-400 text-amber-400 inline shrink-0" />
+                                                        )}
+                                                        {isMine && (
+                                                            <span className="ml-0.5 inline-flex items-center">
+                                                                {msg.status === "failed" ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            retryMessage(msg)
+                                                                        }}
+                                                                        className="inline-flex items-center gap-0.5 text-[10px] text-red-300 hover:text-red-100 font-semibold cursor-pointer"
+                                                                        title="Failed to send. Tap to retry."
+                                                                    >
+                                                                        <AlertCircle size={11} className="text-red-400" />
+                                                                        <span>Retry</span>
+                                                                    </button>
+                                                                ) : msg.id < 0 || msg.is_pending || msg.status === "pending" ? (
+                                                                    <span title="Sending...">
+                                                                        <Clock size={11} className="inline text-purple-200/80 animate-pulse" />
+                                                                    </span>
+                                                                ) : (
+                                                                    <span title="Sent">
+                                                                        <Check size={13} className="inline text-purple-200" />
+                                                                    </span>
+                                                                )}
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </div>

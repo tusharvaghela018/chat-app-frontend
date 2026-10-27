@@ -11,11 +11,30 @@ import { useGetApi } from "@/hooks/api"
 const ChatPage = () => {
     const [selectedUser, setSelectedUser] = useState<IUser | null>(null)
     const [selectedGroup, setSelectedGroup] = useState<IGroup | null>(null)
+    const [displayUser, setDisplayUser] = useState<IUser | null>(null)
+    const [displayGroup, setDisplayGroup] = useState<IGroup | null>(null)
     const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false)
     const [activeTab, setActiveTab] = useState<"dm" | "groups" | "all">("dm")
 
     const location = useLocation()
     const openGroupId = location.state?.openGroupId
+
+    // Keep display chat during smooth mobile exit transition
+    useEffect(() => {
+        if (selectedUser) {
+            setDisplayUser(selectedUser)
+            setDisplayGroup(null)
+        } else if (selectedGroup) {
+            setDisplayGroup(selectedGroup)
+            setDisplayUser(null)
+        } else {
+            const timer = setTimeout(() => {
+                setDisplayUser(null)
+                setDisplayGroup(null)
+            }, 220)
+            return () => clearTimeout(timer)
+        }
+    }, [selectedUser, selectedGroup])
 
     // fetch group detail if redirected from invite link
     const { data: redirectGroupData } = useGetApi<{ group: IGroup }>(
@@ -70,13 +89,17 @@ const ChatPage = () => {
         setSelectedGroup(null)
     }
 
+    const hasActiveChat = Boolean(selectedUser || selectedGroup)
+
     return (
         <div className="h-full flex bg-background overflow-hidden relative">
 
             {/* Sidebar Container with Slim Icon Rail */}
             <div className={`
-                ${(selectedUser || selectedGroup) ? "hidden lg:block" : "block"}
                 w-full md:w-[380px] lg:w-[420px] shrink-0 bg-card border-r border-slate-200/90 dark:border-slate-800 h-full
+                transition-all duration-200 ease-out transform-gpu
+                ${hasActiveChat ? "max-lg:-translate-x-6 max-lg:opacity-0 max-lg:pointer-events-none" : "translate-x-0 opacity-100"}
+                lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto
             `}>
                 <Sidebar
                     selectedUserId={selectedUser?.id ?? null}
@@ -89,12 +112,14 @@ const ChatPage = () => {
                 />
             </div>
 
-            {/* Main Chat Area */}
+            {/* Main Chat Area with Native-like Slide Transition on Mobile */}
             <div className={`
-                ${(selectedUser || selectedGroup) ? "block" : "hidden lg:flex"}
-                flex-1 flex flex-col overflow-hidden w-full relative h-full bg-slate-50/50 dark:bg-[#0c1220]/50
+                flex-1 flex flex-col overflow-hidden w-full h-full bg-slate-50/50 dark:bg-[#0c1220]/50
+                transition-all duration-200 ease-out transform-gpu
+                max-lg:fixed max-lg:inset-0 max-lg:z-40
+                ${hasActiveChat ? "max-lg:translate-x-0 max-lg:opacity-100" : "max-lg:translate-x-full max-lg:opacity-0 max-lg:pointer-events-none"}
             `}>
-                {!selectedUser && !selectedGroup && (
+                {!displayUser && !displayGroup && (
                     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center relative overflow-hidden select-none">
                         {/* Ambient glow */}
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-500/10 dark:bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
@@ -117,26 +142,32 @@ const ChatPage = () => {
                     </div>
                 )}
 
-                {selectedUser && (
+                {displayUser && (
                     <div className="flex-1 flex flex-col h-full overflow-hidden">
                         <DirectChat
-                            key={`direct-${selectedUser.id}`}
-                            user={selectedUser}
+                            key={`direct-${displayUser.id}`}
+                            user={displayUser}
                             onBack={handleBack}
-                            onClose={() => setSelectedUser(null)}
+                            onClose={() => {
+                                setSelectedUser(null)
+                                setDisplayUser(null)
+                            }}
                         />
                     </div>
                 )}
 
-                {selectedGroup && (
+                {displayGroup && (
                     <div className="flex-1 flex flex-col h-full overflow-hidden">
                         <GroupChat
-                            key={`group-${selectedGroup.id}`}
-                            group={selectedGroup}
+                            key={`group-${displayGroup.id}`}
+                            group={displayGroup}
                             onGroupLeft={handleGroupLeft}
                             onOpenDM={handleOpenDM}
                             onBack={handleBack}
-                            onClose={() => setSelectedGroup(null)}
+                            onClose={() => {
+                                setSelectedGroup(null)
+                                setDisplayGroup(null)
+                            }}
                         />
                     </div>
                 )}
