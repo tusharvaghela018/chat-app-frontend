@@ -346,8 +346,15 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         })
     }
 
+    const partnerUser = conversation?.sender_id === authUser?.id ? (conversation as any)?.receiver : (conversation as any)?.sender
+    const partnerPublicKey = user?.public_key || partnerUser?.public_key || null
+
+    useEffect(() => {
+        decryptCache.current.clear()
+    }, [partnerPublicKey, myKeys?.secretKey, user?.id])
+
     // Helper to decrypt messages with O(1) per-message caching
-    const decryptMessage = useCallback((msg: IMessage) => {
+    const decryptMessage = useCallback((msg: IMessage): string => {
         const cacheKey = `${msg.id}_${msg.content}`
         if (decryptCache.current.has(cacheKey)) {
             return decryptCache.current.get(cacheKey)!
@@ -356,19 +363,24 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         let decrypted: string | null = msg.content
         try {
             const parsed = JSON.parse(msg.content) as EncryptedMessage
-            if (parsed.c && parsed.n && myKeys) {
-                const senderPublicKey = user.public_key
-                if (!senderPublicKey) return null
-
-                decrypted = decryptDirectMessage(parsed, senderPublicKey, myKeys.secretKey)
+            if (parsed.c && parsed.n) {
+                if (partnerPublicKey && myKeys?.secretKey) {
+                    const result = decryptDirectMessage(parsed, partnerPublicKey, myKeys.secretKey)
+                    decrypted = result || "🔒 Encrypted message"
+                    decryptCache.current.set(cacheKey, decrypted)
+                    return decrypted
+                } else {
+                    return "🔒 Encrypted message"
+                }
             }
         } catch {
             decrypted = msg.content
         }
 
-        decryptCache.current.set(cacheKey, decrypted)
-        return decrypted
-    }, [user.public_key, myKeys])
+        const safeDecrypted = decrypted || "🔒 Encrypted message"
+        decryptCache.current.set(cacheKey, safeDecrypted)
+        return safeDecrypted
+    }, [partnerPublicKey, myKeys])
 
     // ── search within conversation ───────────────────────────────────────
     const matchingMessageIds = useMemo(() => {
@@ -580,8 +592,9 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     // ── send encrypted payload helper ────────────────────────────────────
     const sendEncryptedMessage = (rawContent: string) => {
         let finalContent = rawContent
-        if (user.public_key && myKeys) {
-            const encrypted = encryptDirectMessage(rawContent, user.public_key, myKeys.secretKey)
+        const targetPublicKey = partnerPublicKey || user.public_key
+        if (targetPublicKey && myKeys) {
+            const encrypted = encryptDirectMessage(rawContent, targetPublicKey, myKeys.secretKey)
             finalContent = JSON.stringify(encrypted)
         }
 
@@ -1051,9 +1064,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                     <>
                         {messages.map((msg: IMessage) => {
                             const isMine = msg.sender_id === authUser?.id
-                            const decryptedContent = decryptMessage(msg)
-
-                            if (decryptedContent === null) return null
+                            const decryptedContent = decryptMessage(msg) || "🔒 Encrypted message"
 
                             // Check if decrypted content is a rich media payload
                             let richPayload: {
