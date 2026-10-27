@@ -59,7 +59,7 @@ const Sidebar = ({
     const socket = useSocket()
     const queryClient = useQueryClient()
 
-    // Real-time synchronization for starred messages counter
+    // Real-time synchronization with 0ms latency for unread message counters
     useEffect(() => {
         if (!socket) return
 
@@ -73,20 +73,124 @@ const Sidebar = ({
             queryClient.invalidateQueries({ queryKey: ["conversations-archived"] })
         }
 
+        // Instant 0ms latency unread counter increment on incoming message
+        const handleReceiveMessage = (msg: any) => {
+            const isFromOther = Number(msg.sender_id) !== Number(authUser?.id)
+
+            queryClient.setQueryData(["conversations"], (old: any) => {
+                if (!old?.data || !Array.isArray(old.data)) return old
+                let found = false
+                const updated = old.data.map((c: any) => {
+                    const partnerId = c.sender_id === authUser?.id ? c.receiver_id : c.sender_id
+                    const isForThisConv = c.id === msg.conversation_id || partnerId === msg.sender_id || partnerId === msg.receiver_id
+                    if (isForThisConv) {
+                        found = true
+                        const isCurrentlyActive = selectedUserId === partnerId
+                        const unreadInc = (isFromOther && !isCurrentlyActive) ? 1 : 0
+                        return {
+                            ...c,
+                            messages: [msg],
+                            unread_count: (Number(c.unread_count) || 0) + unreadInc,
+                            updated_at: new Date().toISOString()
+                        }
+                    }
+                    return c
+                })
+
+                if (!found) {
+                    queryClient.invalidateQueries({ queryKey: ["conversations"] })
+                }
+
+                return { ...old, data: updated }
+            })
+        }
+
+        const handleGroupReceiveMessage = (msg: any) => {
+            const isFromOther = Number(msg.sender_id) !== Number(authUser?.id)
+            queryClient.setQueryData(["groups-count"], (old: any) => {
+                if (!old?.data?.groups || !Array.isArray(old.data.groups)) return old
+                const updated = old.data.groups.map((g: any) => {
+                    if (g.id === msg.group_id) {
+                        const isCurrentlyActive = selectedGroupId === g.id
+                        const unreadInc = (isFromOther && !isCurrentlyActive) ? 1 : 0
+                        return {
+                            ...g,
+                            unread_count: (Number(g.unread_count) || 0) + unreadInc
+                        }
+                    }
+                    return g
+                })
+                return { ...old, data: { ...old.data, groups: updated } }
+            })
+            queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
+        }
+
+        const handleMessagesSeen = ({ conversationId }: { conversationId: number }) => {
+            queryClient.setQueryData(["conversations"], (old: any) => {
+                if (!old?.data || !Array.isArray(old.data)) return old
+                const updated = old.data.map((c: any) => {
+                    if (c.id === conversationId) {
+                        return { ...c, unread_count: 0 }
+                    }
+                    return c
+                })
+                return { ...old, data: updated }
+            })
+        }
+
         socket.on(CHAT_EVENTS.STAR_UPDATED, handleStarUpdated)
         socket.on(GROUP_EVENTS.STAR_UPDATED, handleStarUpdated)
         socket.on(CHAT_EVENTS.NEW_REQUEST, handleRefreshConversations)
-        socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, handleRefreshConversations)
+        socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
+        socket.on(GROUP_EVENTS.RECEIVE_MESSAGE, handleGroupReceiveMessage)
+        socket.on(CHAT_EVENTS.MESSAGES_SEEN, handleMessagesSeen)
         socket.on(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, handleRefreshConversations)
 
         return () => {
             socket.off(CHAT_EVENTS.STAR_UPDATED, handleStarUpdated)
             socket.off(GROUP_EVENTS.STAR_UPDATED, handleStarUpdated)
             socket.off(CHAT_EVENTS.NEW_REQUEST, handleRefreshConversations)
-            socket.off(CHAT_EVENTS.RECEIVE_MESSAGE, handleRefreshConversations)
+            socket.off(CHAT_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
+            socket.off(GROUP_EVENTS.RECEIVE_MESSAGE, handleGroupReceiveMessage)
+            socket.off(CHAT_EVENTS.MESSAGES_SEEN, handleMessagesSeen)
             socket.off(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, handleRefreshConversations)
         }
-    }, [socket, queryClient])
+    }, [socket, queryClient, authUser?.id, selectedUserId, selectedGroupId])
+
+    // Immediately clear unread count for the currently open 1-on-1 chat
+    useEffect(() => {
+        if (!selectedUserId) return
+        queryClient.setQueryData(["conversations"], (old: any) => {
+            if (!old?.data || !Array.isArray(old.data)) return old
+            let hasChanged = false
+            const updated = old.data.map((c: any) => {
+                const partnerId = c.sender_id === authUser?.id ? c.receiver_id : c.sender_id
+                if (partnerId === selectedUserId && Number(c.unread_count) > 0) {
+                    hasChanged = true
+                    return { ...c, unread_count: 0 }
+                }
+                return c
+            })
+            return hasChanged ? { ...old, data: updated } : old
+        })
+    }, [selectedUserId, queryClient, authUser?.id])
+
+    // Immediately clear unread count for the currently open group chat
+    useEffect(() => {
+        if (!selectedGroupId) return
+        queryClient.setQueryData(["groups-count"], (old: any) => {
+            if (!old?.data?.groups || !Array.isArray(old.data.groups)) return old
+            let hasChanged = false
+            const updated = old.data.groups.map((g: any) => {
+                if (g.id === selectedGroupId && Number(g.unread_count) > 0) {
+                    hasChanged = true
+                    return { ...g, unread_count: 0 }
+                }
+                return g
+            })
+            return hasChanged ? { ...old, data: { ...old.data, groups: updated } } : old
+        })
+    }, [selectedGroupId, queryClient])
 
     const { data: convData } = useGetApi<any[]>("/conversations", undefined, {
         queryKey: "conversations",
@@ -105,13 +209,22 @@ const Sidebar = ({
         staleTime: 0,
     })
 
+    const totalUnreadMessages = convData?.data?.reduce((acc: number, conv: any) => {
+        return acc + (Number(conv.unread_count) || 0)
+    }, 0) ?? 0
+
+    const totalGroupUnreadMessages = Array.isArray((groupData?.data as any)?.groups)
+        ? (groupData?.data as any).groups.reduce((acc: number, g: any) => acc + (Number(g.unread_count) || 0), 0)
+        : 0
+
     const conversationsCount = convData?.data?.length ?? 0
-    const archivedCount = archivedConvData?.data?.length ?? 0
-    const starredCount = starredMsgData?.data?.length ?? 0
     const groupsCount =
         (groupData?.data as any)?.count ??
         (groupData?.data as any)?.groups?.length ??
         (Array.isArray(groupData?.data) ? groupData.data.length : 0)
+
+    const archivedCount = archivedConvData?.data?.length ?? 0
+    const starredCount = starredMsgData?.data?.length ?? 0
 
     const handleSelectNav = (tab: SidebarNavTab) => {
         setNavTab(tab)
@@ -154,13 +267,13 @@ const Sidebar = ({
                             title="All Chats"
                         >
                             <MessageSquare size={19} className={navTab === "all" ? "stroke-[2.3]" : "stroke-[1.8]"} />
-                            {conversationsCount > 0 && (
+                            {totalUnreadMessages > 0 && (
                                 <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${
                                     navTab === "all"
                                         ? "bg-white text-purple-700 shadow-xs ring-2 ring-purple-600"
                                         : "bg-purple-600 text-white shadow-xs"
                                 }`}>
-                                    {conversationsCount}
+                                    {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
                                 </span>
                             )}
                         </button>
@@ -177,13 +290,13 @@ const Sidebar = ({
                             title="Groups"
                         >
                             <Users size={19} className={navTab === "groups" ? "stroke-[2.3]" : "stroke-[1.8]"} />
-                            {groupsCount > 0 && (
+                            {totalGroupUnreadMessages > 0 && (
                                 <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${
                                     navTab === "groups"
                                         ? "bg-white text-purple-700 shadow-xs ring-2 ring-purple-600"
                                         : "bg-purple-600 text-white shadow-xs"
                                 }`}>
-                                    {groupsCount}
+                                    {totalGroupUnreadMessages > 99 ? "99+" : totalGroupUnreadMessages}
                                 </span>
                             )}
                         </button>

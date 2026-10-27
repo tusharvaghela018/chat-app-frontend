@@ -55,11 +55,13 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
 
         socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, onRefresh)
         socket.on(CHAT_EVENTS.NEW_REQUEST, onRefresh)
+        socket.on(CHAT_EVENTS.MESSAGES_SEEN, onRefresh)
         socket.on(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onRefresh)
 
         return () => {
             socket.off(CHAT_EVENTS.RECEIVE_MESSAGE, onRefresh)
             socket.off(CHAT_EVENTS.NEW_REQUEST, onRefresh)
+            socket.off(CHAT_EVENTS.MESSAGES_SEEN, onRefresh)
             socket.off(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onRefresh)
         }
     }, [socket, queryClient])
@@ -219,7 +221,8 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
                         
                         const lastMsg = conv.messages?.[0]
                         const isSelected = selectedUserId === otherUser.id
-                        const isUnread = lastMsg && !lastMsg.is_seen && lastMsg.sender_id !== authUser?.id && !iBlocked
+                        const unreadCount = Number((conv as any).unread_count ?? (lastMsg && !lastMsg.is_seen && lastMsg.sender_id !== authUser?.id && !iBlocked ? 1 : 0))
+                        const isUnread = unreadCount > 0 && !isSelected
 
                         return (
                             <div
@@ -294,7 +297,7 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
                                         </p>
                                         {isUnread && (
                                             <span className="h-5 min-w-5 px-1.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shadow-xs shadow-purple-600/30 shrink-0">
-                                                1
+                                                {unreadCount > 99 ? "99+" : unreadCount}
                                             </span>
                                         )}
                                     </div>
