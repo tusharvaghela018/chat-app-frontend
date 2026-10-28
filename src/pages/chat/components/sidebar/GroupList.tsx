@@ -6,6 +6,8 @@ import type { IGroup } from "@/types"
 import { useSocket } from "@/hooks/socket"
 import { useQueryClient } from "@tanstack/react-query"
 import { GROUP_EVENTS } from "@/pages/chat/constants"
+import { useSelector } from "react-redux"
+import { getUser } from "@/redux/slices/auth.slice"
 
 export interface GroupResponse {
     groups: IGroup[]
@@ -30,10 +32,24 @@ const GroupList = ({ selectedGroupId, onSelectGroup, externalSearch }: Props) =>
     const [groupList, setGroupList] = useState<IGroup[]>([])
     const bottomRef = useRef<HTMLDivElement>(null)
 
+    const authUser = useSelector(getUser)
     const socket = useSocket()
     const queryClient = useQueryClient()
 
     const debouncedSearch = useDebounce(search, 400)
+
+    // Immediately clear unread count for selected group in local list
+    useEffect(() => {
+        if (!selectedGroupId) return
+        setGroupList((prev) =>
+            prev.map((g) => {
+                if (g.id === selectedGroupId && Number((g as any).unread_count) > 0) {
+                    return { ...g, unread_count: 0 }
+                }
+                return g
+            })
+        )
+    }, [selectedGroupId])
 
     useEffect(() => {
         setPage(1)
@@ -74,7 +90,7 @@ const GroupList = ({ selectedGroupId, onSelectGroup, externalSearch }: Props) =>
         return () => observer.disconnect()
     }, [handleObserver])
 
-    // listen for member changes and refetch group list
+    // listen for member changes and live message updates with 0ms in-memory cache updates
     useEffect(() => {
         if (!socket) return
 
@@ -83,16 +99,36 @@ const GroupList = ({ selectedGroupId, onSelectGroup, externalSearch }: Props) =>
             queryClient.invalidateQueries({ queryKey: ["groups-count"] })
         }
 
+        const handleReceiveMessage = (msg: any) => {
+            const isFromOther = Number(msg.sender_id) !== Number(authUser?.id)
+            setGroupList((prev) =>
+                prev.map((g) => {
+                    if (g.id === msg.group_id) {
+                        const isCurrentlyActive = selectedGroupId === g.id
+                        const unreadInc = (isFromOther && !isCurrentlyActive) ? 1 : 0
+                        return {
+                            ...g,
+                            unread_count: (Number((g as any).unread_count) || 0) + unreadInc,
+                            last_message: msg,
+                            last_message_content: msg.content,
+                            last_message_time: msg.created_at || new Date().toISOString()
+                        }
+                    }
+                    return g
+                })
+            )
+        }
+
         socket.on(GROUP_EVENTS.MEMBER_JOINED, handleRefreshGroups)
         socket.on(GROUP_EVENTS.MEMBER_LEFT, handleRefreshGroups)
-        socket.on(GROUP_EVENTS.RECEIVE_MESSAGE, handleRefreshGroups)
+        socket.on(GROUP_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
 
         return () => {
             socket.off(GROUP_EVENTS.MEMBER_JOINED, handleRefreshGroups)
             socket.off(GROUP_EVENTS.MEMBER_LEFT, handleRefreshGroups)
-            socket.off(GROUP_EVENTS.RECEIVE_MESSAGE, handleRefreshGroups)
+            socket.off(GROUP_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage)
         }
-    }, [socket])
+    }, [socket, queryClient, authUser?.id, selectedGroupId])
 
     return (
         <div className="flex flex-col h-full bg-card">
@@ -135,11 +171,23 @@ const GroupList = ({ selectedGroupId, onSelectGroup, externalSearch }: Props) =>
 
                 <div className="space-y-1.5 py-1">
                     {groupList.map((group: IGroup) => {
-                        const isSelected = selectedGroupId === group.id
+                        const isSelected = Number(selectedGroupId) === Number(group.id)
                         return (
                             <div
                                 key={group.id}
-                                onClick={() => onSelectGroup(group)}
+                                onClick={() => {
+                                    const clearThisGroup = (old: any) => {
+                                        if (!old?.data?.groups || !Array.isArray(old.data.groups)) return old
+                                        const updated = old.data.groups.map((g: any) =>
+                                            Number(g.id) === Number(group.id) ? { ...g, unread_count: 0 } : g
+                                        )
+                                        return { ...old, data: { ...old.data, groups: updated } }
+                                    }
+                                    queryClient.setQueriesData({ queryKey: ["groups-"] }, clearThisGroup)
+                                    queryClient.setQueriesData({ queryKey: ["groups-count"] }, clearThisGroup)
+                                    setGroupList(prev => prev.map(g => Number(g.id) === Number(group.id) ? { ...g, unread_count: 0 } : g))
+                                    onSelectGroup(group)
+                                }}
                                 className={`flex items-center gap-3 p-3 cursor-pointer rounded-2xl transition-all duration-200 ${
                                     isSelected 
                                         ? "bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 shadow-xs" 

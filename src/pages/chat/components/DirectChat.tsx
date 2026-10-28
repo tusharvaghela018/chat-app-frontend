@@ -510,11 +510,11 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
 
     // Separate effect for mark seen so it doesn't cause messages to re-sync
     useEffect(() => {
-        const convId = activeConvRef.current || conversation?.id
+        const convId = conversation?.id || activeConvRef.current || messages?.[0]?.conversation_id
         if (convId && socket && !iBlocked && isAccepted) {
             emitMarkSeen(convId, user.id)
         }
-    }, [conversation?.id, socket, iBlocked, isAccepted, user.id])
+    }, [conversation?.id, messages.length, socket, iBlocked, isAccepted, user.id])
 
     // Instant synchronous scroll to bottom before paint on initial load
     useLayoutEffect(() => {
@@ -874,8 +874,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                         type="button"
                         onClick={() => handleToggleBlock(!iBlocked)}
                         className={`p-2 rounded-full transition-all ${iBlocked
-                                ? "text-red-600 bg-red-100/90 dark:bg-red-950/70 ring-1 ring-red-400/60 shadow-2xs hover:bg-red-200 dark:hover:bg-red-900/60"
-                                : "text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
+                            ? "text-red-600 bg-red-100/90 dark:bg-red-950/70 ring-1 ring-red-400/60 shadow-2xs hover:bg-red-200 dark:hover:bg-red-900/60"
+                            : "text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
                             }`}
                         title={iBlocked ? "Unblock user" : "Block user"}
                         aria-label={iBlocked ? "Unblock user" : "Block user"}
@@ -889,8 +889,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                             type="button"
                             onClick={() => setShowMoreMenu((prev) => !prev)}
                             className={`header-more-btn p-2 rounded-full transition-colors ${showMoreMenu
-                                    ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
-                                    : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                                ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
+                                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
                                 }`}
                             title="More options"
                             aria-label="More options"
@@ -1070,9 +1070,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             {/* messages scroll stream */}
             <div
                 ref={scrollContainerRef}
-                className={`flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4 custom-scrollbar transition-opacity duration-150 ${
-                    isChatReady || messages.length === 0 ? "opacity-100" : "opacity-0"
-                }`}
+                className={`flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4 custom-scrollbar transition-opacity duration-150 ${isChatReady || messages.length === 0 ? "opacity-100" : "opacity-0"
+                    }`}
             >
                 <div ref={topRef} className="h-1" />
 
@@ -1151,10 +1150,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                         key={msg.id}
                                         id={`direct-msg-${msg.id}`}
                                         className={`transition-all rounded-2xl ${isCurrentSearchMatch
-                                                ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] p-1"
-                                                : isSearchMatch
-                                                    ? "bg-purple-500/5 ring-1 ring-purple-400/40 p-1"
-                                                    : ""
+                                            ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] p-1"
+                                            : isSearchMatch
+                                                ? "bg-purple-500/5 ring-1 ring-purple-400/40 p-1"
+                                                : ""
                                             }`}
                                     >
                                         <CallLogBubble
@@ -1203,10 +1202,10 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                         }
                                     }}
                                     className={`flex ${isMine ? "justify-end" : "justify-start"} items-end gap-2.5 transition-all duration-200 rounded-2xl ${isCurrentSearchMatch
-                                            ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] scale-[1.01] p-1"
-                                            : isSearchMatch
-                                                ? "bg-purple-500/5 ring-1 ring-purple-400/40 p-1"
-                                                : ""
+                                        ? "bg-purple-500/15 ring-2 ring-purple-500 dark:ring-purple-400 ring-offset-2 dark:ring-offset-[#0b1120] scale-[1.01] p-1"
+                                        : isSearchMatch
+                                            ? "bg-purple-500/5 ring-1 ring-purple-400/40 p-1"
+                                            : ""
                                         } ${shouldAnimate ? "animate-in slide-in-from-bottom-2 duration-200" : ""}`}
                                 >
                                     {/* Left avatar for received messages matching mockup */}
@@ -1254,8 +1253,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                         setMoreEmojiMsgId(moreEmojiMsgId === msg.id ? null : msg.id)
                                                     }}
                                                     className={`p-1 rounded-full transition-colors flex items-center justify-center ${moreEmojiMsgId === msg.id
-                                                            ? "text-purple-600 bg-purple-100 dark:bg-purple-900/40"
-                                                            : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"
+                                                        ? "text-purple-600 bg-purple-100 dark:bg-purple-900/40"
+                                                        : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"
                                                         }`}
                                                     title="Add custom reaction"
                                                 >
@@ -1288,8 +1287,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                         handleToggleStar(msg.id)
                                                     }}
                                                     className={`p-1 rounded-full transition-colors flex items-center justify-center ${isStarred
-                                                            ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/40"
-                                                            : "text-slate-400 hover:text-amber-500 dark:hover:text-amber-400"
+                                                        ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/40"
+                                                        : "text-slate-400 hover:text-amber-500 dark:hover:text-amber-400"
                                                         }`}
                                                     title={isStarred ? "Unstar message" : "Star message"}
                                                 >
@@ -1353,8 +1352,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                 />
                                             ) : (
                                                 <div className={`relative px-4 py-2.5 text-sm break-words shadow-xs ${isMine
-                                                        ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
-                                                        : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
+                                                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
+                                                    : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
                                                     }`}>
                                                     <RichTextRenderer content={decryptedContent} isMine={isMine} />
 
@@ -1415,8 +1414,8 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                                 handleToggleReaction(msg.id, emoji)
                                                             }}
                                                             className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full transition-transform hover:scale-110 active:scale-95 ${hasReacted
-                                                                    ? "bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-bold"
-                                                                    : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                                                ? "bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-bold"
+                                                                : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
                                                                 }`}
                                                             title={hasReacted ? `You reacted with ${emoji} (click to remove)` : `Reacted with ${emoji}`}
                                                         >

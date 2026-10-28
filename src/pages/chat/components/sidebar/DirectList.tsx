@@ -53,15 +53,11 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
             queryClient.invalidateQueries({ queryKey: ['conversations-archived'] })
         }
 
-        socket.on(CHAT_EVENTS.RECEIVE_MESSAGE, onRefresh)
         socket.on(CHAT_EVENTS.NEW_REQUEST, onRefresh)
-        socket.on(CHAT_EVENTS.MESSAGES_SEEN, onRefresh)
         socket.on(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onRefresh)
 
         return () => {
-            socket.off(CHAT_EVENTS.RECEIVE_MESSAGE, onRefresh)
             socket.off(CHAT_EVENTS.NEW_REQUEST, onRefresh)
-            socket.off(CHAT_EVENTS.MESSAGES_SEEN, onRefresh)
             socket.off(CHAT_EVENTS.CONVERSATION_STATUS_UPDATED, onRefresh)
         }
     }, [socket, queryClient])
@@ -220,14 +216,32 @@ const DirectList = ({ selectedUserId, onSelectUser, externalSearch, isArchived =
                         const iBlocked = conv.sender_id === authUser?.id ? conv.blocked_by_sender : conv.blocked_by_receiver
                         
                         const lastMsg = conv.messages?.[0]
-                        const isSelected = selectedUserId === otherUser.id
-                        const unreadCount = Number((conv as any).unread_count ?? (lastMsg && !lastMsg.is_seen && lastMsg.sender_id !== authUser?.id && !iBlocked ? 1 : 0))
+                        const isSelected = Number(selectedUserId) === Number(otherUser.id)
+                        const unreadCount = isSelected ? 0 : Number((conv as any).unread_count ?? (lastMsg && !lastMsg.is_seen && lastMsg.sender_id !== authUser?.id && !iBlocked ? 1 : 0))
                         const isUnread = unreadCount > 0 && !isSelected
 
                         return (
                             <div
                                 key={conv.id}
-                                onClick={() => onSelectUser(otherUser)}
+                                onClick={() => {
+                                    const clearThisConv = (old: any) => {
+                                        if (!old?.data || !Array.isArray(old.data)) return old
+                                        const updated = old.data.map((c: any) => {
+                                            if (c.id === conv.id) {
+                                                return {
+                                                    ...c,
+                                                    unread_count: 0,
+                                                    messages: c.messages?.map((m: any) => ({ ...m, is_seen: true })) ?? []
+                                                }
+                                            }
+                                            return c
+                                        })
+                                        return { ...old, data: updated }
+                                    }
+                                    queryClient.setQueriesData({ queryKey: ["conversations"] }, clearThisConv)
+                                    queryClient.setQueriesData({ queryKey: ["conversations-archived"] }, clearThisConv)
+                                    onSelectUser(otherUser)
+                                }}
                                 className={`group flex items-center gap-3 p-3 cursor-pointer rounded-2xl transition-all duration-200 ${
                                     isSelected 
                                         ? "bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 shadow-xs" 

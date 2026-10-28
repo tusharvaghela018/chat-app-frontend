@@ -77,32 +77,37 @@ const Sidebar = ({
         const handleReceiveMessage = (msg: any) => {
             const isFromOther = Number(msg.sender_id) !== Number(authUser?.id)
 
-            queryClient.setQueryData(["conversations"], (old: any) => {
-                if (!old?.data || !Array.isArray(old.data)) return old
-                let found = false
-                const updated = old.data.map((c: any) => {
-                    const partnerId = c.sender_id === authUser?.id ? c.receiver_id : c.sender_id
-                    const isForThisConv = c.id === msg.conversation_id || partnerId === msg.sender_id || partnerId === msg.receiver_id
-                    if (isForThisConv) {
-                        found = true
-                        const isCurrentlyActive = selectedUserId === partnerId
-                        const unreadInc = (isFromOther && !isCurrentlyActive) ? 1 : 0
-                        return {
-                            ...c,
-                            messages: [msg],
-                            unread_count: (Number(c.unread_count) || 0) + unreadInc,
-                            updated_at: new Date().toISOString()
+            const updateConvList = (queryKey: string) => {
+                queryClient.setQueryData([queryKey], (old: any) => {
+                    if (!old?.data || !Array.isArray(old.data)) return old
+                    let found = false
+                    const updated = old.data.map((c: any) => {
+                        const partnerId = c.sender_id === authUser?.id ? c.receiver_id : c.sender_id
+                        const isForThisConv = c.id === msg.conversation_id || partnerId === msg.sender_id || partnerId === msg.receiver_id
+                        if (isForThisConv) {
+                            found = true
+                            const isCurrentlyActive = selectedUserId === partnerId
+                            const unreadInc = (isFromOther && !isCurrentlyActive) ? 1 : 0
+                            return {
+                                ...c,
+                                messages: [msg],
+                                unread_count: (Number(c.unread_count) || 0) + unreadInc,
+                                updated_at: new Date().toISOString()
+                            }
                         }
+                        return c
+                    })
+
+                    if (!found && queryKey === "conversations") {
+                        queryClient.invalidateQueries({ queryKey: ["conversations"] })
                     }
-                    return c
+
+                    return { ...old, data: updated }
                 })
+            }
 
-                if (!found) {
-                    queryClient.invalidateQueries({ queryKey: ["conversations"] })
-                }
-
-                return { ...old, data: updated }
-            })
+            updateConvList("conversations")
+            updateConvList("conversations-archived")
         }
 
         const handleGroupReceiveMessage = (msg: any) => {
@@ -122,11 +127,29 @@ const Sidebar = ({
                 })
                 return { ...old, data: { ...old.data, groups: updated } }
             })
-            queryClient.invalidateQueries({ queryKey: ["groups-"], exact: false })
+
+            queryClient.setQueriesData({ queryKey: ["groups-"] }, (old: any) => {
+                if (!old?.data?.groups || !Array.isArray(old.data.groups)) return old
+                const updated = old.data.groups.map((g: any) => {
+                    if (g.id === msg.group_id) {
+                        const isCurrentlyActive = selectedGroupId === g.id
+                        const unreadInc = (isFromOther && !isCurrentlyActive) ? 1 : 0
+                        return {
+                            ...g,
+                            unread_count: (Number((g as any).unread_count) || 0) + unreadInc,
+                            last_message: msg,
+                            last_message_content: msg.content,
+                            last_message_time: msg.created_at || new Date().toISOString()
+                        }
+                    }
+                    return g
+                })
+                return { ...old, data: { ...old.data, groups: updated } }
+            })
         }
 
         const handleMessagesSeen = ({ conversationId }: { conversationId: number }) => {
-            queryClient.setQueryData(["conversations"], (old: any) => {
+            const clearUnread = (old: any) => {
                 if (!old?.data || !Array.isArray(old.data)) return old
                 const updated = old.data.map((c: any) => {
                     if (c.id === conversationId) {
@@ -135,7 +158,9 @@ const Sidebar = ({
                     return c
                 })
                 return { ...old, data: updated }
-            })
+            }
+            queryClient.setQueryData(["conversations"], clearUnread)
+            queryClient.setQueryData(["conversations-archived"], clearUnread)
         }
 
         socket.on(CHAT_EVENTS.STAR_UPDATED, handleStarUpdated)
@@ -160,7 +185,7 @@ const Sidebar = ({
     // Immediately clear unread count for the currently open 1-on-1 chat
     useEffect(() => {
         if (!selectedUserId) return
-        queryClient.setQueryData(["conversations"], (old: any) => {
+        const clearUnread = (old: any) => {
             if (!old?.data || !Array.isArray(old.data)) return old
             let hasChanged = false
             const updated = old.data.map((c: any) => {
@@ -172,13 +197,27 @@ const Sidebar = ({
                 return c
             })
             return hasChanged ? { ...old, data: updated } : old
-        })
+        }
+        queryClient.setQueryData(["conversations"], clearUnread)
+        queryClient.setQueryData(["conversations-archived"], clearUnread)
     }, [selectedUserId, queryClient, authUser?.id])
 
     // Immediately clear unread count for the currently open group chat
     useEffect(() => {
         if (!selectedGroupId) return
         queryClient.setQueryData(["groups-count"], (old: any) => {
+            if (!old?.data?.groups || !Array.isArray(old.data.groups)) return old
+            let hasChanged = false
+            const updated = old.data.groups.map((g: any) => {
+                if (g.id === selectedGroupId && Number(g.unread_count) > 0) {
+                    hasChanged = true
+                    return { ...g, unread_count: 0 }
+                }
+                return g
+            })
+            return hasChanged ? { ...old, data: { ...old.data, groups: updated } } : old
+        })
+        queryClient.setQueriesData({ queryKey: ["groups-"] }, (old: any) => {
             if (!old?.data?.groups || !Array.isArray(old.data.groups)) return old
             let hasChanged = false
             const updated = old.data.groups.map((g: any) => {
@@ -210,11 +249,20 @@ const Sidebar = ({
     })
 
     const totalUnreadMessages = convData?.data?.reduce((acc: number, conv: any) => {
+        const partnerId = Number(conv.sender_id) === Number(authUser?.id) ? Number(conv.receiver_id) : Number(conv.sender_id)
+        if (selectedUserId && Number(selectedUserId) === Number(partnerId)) {
+            return acc
+        }
         return acc + (Number(conv.unread_count) || 0)
     }, 0) ?? 0
 
     const totalGroupUnreadMessages = Array.isArray((groupData?.data as any)?.groups)
-        ? (groupData?.data as any).groups.reduce((acc: number, g: any) => acc + (Number(g.unread_count) || 0), 0)
+        ? (groupData?.data as any).groups.reduce((acc: number, g: any) => {
+            if (selectedGroupId && Number(selectedGroupId) === Number(g.id)) {
+                return acc
+            }
+            return acc + (Number(g.unread_count) || 0)
+        }, 0)
         : 0
 
     const conversationsCount = convData?.data?.length ?? 0
@@ -259,20 +307,18 @@ const Sidebar = ({
                         <button
                             type="button"
                             onClick={() => handleSelectNav("all")}
-                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer group ${
-                                navTab === "all"
+                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer group ${navTab === "all"
                                     ? "bg-purple-600 text-white shadow-md shadow-purple-600/35"
                                     : "text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800/80"
-                            }`}
+                                }`}
                             title="All Chats"
                         >
                             <MessageSquare size={19} className={navTab === "all" ? "stroke-[2.3]" : "stroke-[1.8]"} />
                             {totalUnreadMessages > 0 && (
-                                <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${
-                                    navTab === "all"
+                                <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${navTab === "all"
                                         ? "bg-white text-purple-700 shadow-xs ring-2 ring-purple-600"
                                         : "bg-purple-600 text-white shadow-xs"
-                                }`}>
+                                    }`}>
                                     {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
                                 </span>
                             )}
@@ -282,20 +328,18 @@ const Sidebar = ({
                         <button
                             type="button"
                             onClick={() => handleSelectNav("groups")}
-                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer group ${
-                                navTab === "groups"
+                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer group ${navTab === "groups"
                                     ? "bg-purple-600 text-white shadow-md shadow-purple-600/35"
                                     : "text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800/80"
-                            }`}
+                                }`}
                             title="Groups"
                         >
                             <Users size={19} className={navTab === "groups" ? "stroke-[2.3]" : "stroke-[1.8]"} />
                             {totalGroupUnreadMessages > 0 && (
-                                <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${
-                                    navTab === "groups"
+                                <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${navTab === "groups"
                                         ? "bg-white text-purple-700 shadow-xs ring-2 ring-purple-600"
                                         : "bg-purple-600 text-white shadow-xs"
-                                }`}>
+                                    }`}>
                                     {totalGroupUnreadMessages > 99 ? "99+" : totalGroupUnreadMessages}
                                 </span>
                             )}
@@ -305,11 +349,10 @@ const Sidebar = ({
                         <button
                             type="button"
                             onClick={() => handleSelectNav("calls")}
-                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
-                                navTab === "calls"
+                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${navTab === "calls"
                                     ? "bg-purple-600 text-white shadow-md shadow-purple-600/35"
                                     : "text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800/80"
-                            }`}
+                                }`}
                             title="Calls"
                         >
                             <Phone size={19} className={navTab === "calls" ? "stroke-[2.3]" : "stroke-[1.8]"} />
@@ -319,20 +362,18 @@ const Sidebar = ({
                         <button
                             type="button"
                             onClick={() => handleSelectNav("starred")}
-                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
-                                navTab === "starred"
+                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${navTab === "starred"
                                     ? "bg-purple-600 text-white shadow-md shadow-purple-600/35"
                                     : "text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800/80"
-                            }`}
+                                }`}
                             title="Starred"
                         >
                             <Star size={19} className={navTab === "starred" ? "stroke-[2.3]" : "stroke-[1.8]"} />
                             {starredCount > 0 && (
-                                <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${
-                                    navTab === "starred"
+                                <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${navTab === "starred"
                                         ? "bg-white text-purple-700 shadow-xs ring-2 ring-purple-600"
                                         : "bg-purple-600 text-white shadow-xs"
-                                }`}>
+                                    }`}>
                                     {starredCount}
                                 </span>
                             )}
@@ -342,20 +383,18 @@ const Sidebar = ({
                         <button
                             type="button"
                             onClick={() => handleSelectNav("archived")}
-                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
-                                navTab === "archived"
+                            className={`relative h-11 w-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${navTab === "archived"
                                     ? "bg-purple-600 text-white shadow-md shadow-purple-600/35"
                                     : "text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800/80"
-                            }`}
+                                }`}
                             title="Archived"
                         >
                             <Archive size={19} className={navTab === "archived" ? "stroke-[2.3]" : "stroke-[1.8]"} />
                             {archivedCount > 0 && (
-                                <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${
-                                    navTab === "archived"
+                                <span className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold leading-tight ${navTab === "archived"
                                         ? "bg-white text-purple-700 shadow-xs ring-2 ring-purple-600"
                                         : "bg-purple-600 text-white shadow-xs"
-                                }`}>
+                                    }`}>
                                     {archivedCount}
                                 </span>
                             )}
@@ -450,8 +489,8 @@ const Sidebar = ({
                                 navTab === "groups"
                                     ? "Search groups..."
                                     : navTab === "calls"
-                                    ? "Search call history..."
-                                    : "Search conversations..."
+                                        ? "Search call history..."
+                                        : "Search conversations..."
                             }
                             className="w-full pl-10 pr-12 py-2 text-xs bg-slate-100 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 rounded-xl outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all duration-200 placeholder:text-slate-400 text-slate-900 dark:text-slate-100"
                         />
