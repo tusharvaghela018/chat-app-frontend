@@ -116,7 +116,7 @@ const ChatPage = () => {
             <div className={`
                 flex-1 flex flex-col overflow-hidden w-full h-full bg-slate-50/50 dark:bg-[#0c1220]/50
                 transition-all duration-200 ease-out transform-gpu
-                max-lg:fixed max-lg:inset-0 max-lg:z-40
+                max-lg:absolute max-lg:inset-0 max-lg:z-30 max-lg:bg-slate-50 max-lg:dark:bg-[#0b1120]
                 ${hasActiveChat ? "max-lg:translate-x-0 max-lg:opacity-100" : "max-lg:translate-x-full max-lg:opacity-0 max-lg:pointer-events-none"}
             `}>
                 {!displayUser && !displayGroup && (
