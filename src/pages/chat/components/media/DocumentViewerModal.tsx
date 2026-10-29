@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import {
     X,
     Download,
@@ -11,6 +11,7 @@ import {
     FileCode,
     FileArchive,
 } from "lucide-react"
+import { renderAsync } from "docx-preview"
 import axiosInstance from "@/api/axios"
 import { formatBytes } from "@/pages/chat/components/media/DocumentCard"
 
@@ -38,10 +39,16 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
     const [isTextLoading, setIsTextLoading] = useState(false)
     const [isCopied, setIsCopied] = useState(false)
 
+    // DOCX rendering state
+    const docxContainerRef = useRef<HTMLDivElement>(null)
+    const [isDocxLoading, setIsDocxLoading] = useState(false)
+    const [docxError, setDocxError] = useState(false)
+
     const ext = (name.split(".").pop() || "FILE").toUpperCase()
     const isPdf = ext === "PDF"
+    const isDocx = ext === "DOCX"
     const isText = ["TXT", "JSON", "CSV", "MD", "LOG", "JS", "TS", "HTML", "CSS", "XML", "PY", "SQL", "ENV"].includes(ext)
-    const isOffice = ["DOC", "DOCX", "XLS", "XLSX", "PPT", "PPTX"].includes(ext)
+    const isOffice = ["DOC", "XLS", "XLSX", "PPT", "PPTX"].includes(ext)
     const isArchive = ["ZIP", "RAR", "7Z", "TAR", "GZ"].includes(ext)
 
     // Base backend proxy URLs
@@ -65,6 +72,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         if (isOpen) {
             setIsLoading(true)
             setTextContent(null)
+            setDocxError(false)
 
             // If text file, fetch content to render in viewer
             if (isText) {
@@ -86,8 +94,38 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                         setIsLoading(false)
                     })
             }
+
+            // If DOCX file, render client-side via docx-preview
+            if (isDocx) {
+                setIsDocxLoading(true)
+                axiosInstance
+                    .get("/upload/download", {
+                        params: { url, name, inline: true },
+                        responseType: "blob",
+                    })
+                    .then(async (res) => {
+                        if (docxContainerRef.current) {
+                            docxContainerRef.current.innerHTML = ""
+                            await renderAsync(res.data, docxContainerRef.current, undefined, {
+                                className: "docx-rendered-view",
+                                inWrapper: true,
+                                ignoreWidth: false,
+                                ignoreHeight: false,
+                                breakPages: true,
+                            })
+                        }
+                    })
+                    .catch((err) => {
+                        console.error("Failed to render docx:", err)
+                        setDocxError(true)
+                    })
+                    .finally(() => {
+                        setIsDocxLoading(false)
+                        setIsLoading(false)
+                    })
+            }
         }
-    }, [isOpen, url, name, isText])
+    }, [isOpen, url, name, isText, isDocx])
 
     if (!isOpen) return null
 
@@ -237,7 +275,35 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                         </div>
                     )}
 
-                    {/* Office Files (Docx, Xlsx, Pptx) */}
+                    {/* DOCX Native Viewer */}
+                    {isDocx && (
+                        <div className="w-full h-full overflow-y-auto bg-slate-900/90 p-2 sm:p-6 flex flex-col items-center custom-scrollbar">
+                            {isDocxLoading && (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-24">
+                                    <Loader2 size={36} className="animate-spin text-purple-500 mb-3" />
+                                    <p className="text-sm font-medium">Rendering document preview...</p>
+                                </div>
+                            )}
+                            {docxError && !isDocxLoading && (
+                                <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400 py-24">
+                                    <p className="text-sm text-red-400 mb-4">Could not render inline preview for this DOCX file.</p>
+                                    <button
+                                        type="button"
+                                        onClick={onDownload}
+                                        className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md transition-colors cursor-pointer"
+                                    >
+                                        Download File Instead
+                                    </button>
+                                </div>
+                            )}
+                            <div
+                                ref={docxContainerRef}
+                                className={`w-full max-w-4xl shadow-2xl rounded-lg [&_.docx-wrapper]:!bg-transparent [&_.docx-wrapper]:!p-0 [&_section.docx]:!bg-white [&_section.docx]:!text-slate-900 [&_section.docx]:!shadow-xl [&_section.docx]:!rounded-sm [&_section.docx]:!mb-6 [&_section.docx]:!mx-auto ${isDocxLoading || docxError ? "hidden" : "block"}`}
+                            />
+                        </div>
+                    )}
+
+                    {/* Office Files (Doc, Xlsx, Pptx) */}
                     {isOffice && (
                         <div className="relative w-full h-full flex flex-col">
                             {/* Google Docs Viewer Embed */}
@@ -272,7 +338,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                     )}
 
                     {/* Archive (Zip, Rar) / Unsupported Fallback */}
-                    {!isPdf && !isText && !isOffice && (
+                    {!isPdf && !isText && !isDocx && !isOffice && (
                         <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-slate-900/50">
                             <div
                                 className={`h-16 w-16 rounded-2xl flex items-center justify-center mb-4 shadow-lg ${getBadgeStyle()}`}
