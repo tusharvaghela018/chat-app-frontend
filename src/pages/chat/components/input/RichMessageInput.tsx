@@ -136,7 +136,7 @@ export const RichMessageInput: React.FC<RichMessageInputProps> = ({
     disabled = false,
     disabledReason,
 }) => {
-    const [showToolbar, setShowToolbar] = useState(true)
+    const [showToolbar, setShowToolbar] = useState(false)
     const [showEmojiPicker, setShowEmojiPicker] = useState(false)
     const [showAttachMenu, setShowAttachMenu] = useState(false)
 

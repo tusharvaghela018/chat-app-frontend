@@ -4,7 +4,7 @@ import {
     User, Send, ChevronLeft, MessageSquare, X, Lock, ShieldAlert,
     Ban, Check, UserMinus, Loader2, Video, Phone, Search,
     Smile, CheckCheck, Copy, Archive, ArchiveRestore, Star, MoreHorizontal,
-    ChevronUp, ChevronDown, Clock, AlertCircle
+    ChevronUp, ChevronDown, Clock, AlertCircle, Reply
 } from "lucide-react"
 import { useGetApi, usePatchApi } from "@/hooks/api"
 import axiosInstance from "@/api/axios"
@@ -30,6 +30,7 @@ import ImageBubble from "@/pages/chat/components/media/ImageBubble"
 import CallLogBubble from "@/pages/chat/components/media/CallLogBubble"
 import RichTextRenderer from "@/pages/chat/components/RichTextRenderer"
 import RichMessageInput from "@/pages/chat/components/input/RichMessageInput"
+import ReplyPreviewBar from "./ReplyPreviewBar"
 import UserProfileModal from "./UserProfileModal"
 import { useCall } from "@/context/CallContext"
 
@@ -85,6 +86,134 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
     const [searchQuery, setSearchQuery] = useState("")
     const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
     const searchInputRef = useRef<HTMLInputElement>(null)
+
+    // Chat reply state
+    const [replyingTo, setReplyingTo] = useState<{
+        id: number
+        sender_id: number
+        sender_name: string
+        content: string
+    } | null>(null)
+    const [swipingMsgId, setSwipingMsgId] = useState<number | null>(null)
+    const [swipeOffset, setSwipeOffset] = useState<number>(0)
+    const touchStartXRef = useRef<number>(0)
+    const touchStartYRef = useRef<number>(0)
+    const isSwipingRef = useRef<boolean>(false)
+
+    // Close reply on Escape
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && replyingTo) {
+                setReplyingTo(null)
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown)
+        return () => window.removeEventListener("keydown", handleKeyDown)
+    }, [replyingTo])
+
+    const handleStartReply = useCallback((msg: IMessage, decryptedText: string, senderName: string) => {
+        setReplyingTo({
+            id: msg.id,
+            sender_id: msg.sender_id,
+            sender_name: senderName,
+            content: decryptedText,
+        })
+    }, [])
+
+    const scrollToMessage = useCallback((targetId: number) => {
+        const el = document.getElementById(`direct-msg-${targetId}`)
+        if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" })
+            el.classList.add("ring-2", "ring-purple-500", "ring-offset-2")
+            setTimeout(() => {
+                el.classList.remove("ring-2", "ring-purple-500", "ring-offset-2")
+            }, 1800)
+        }
+    }, [])
+
+    // Only enable touch swipe gesture on touchscreens/mobile devices.
+    // On desktop, mouse dragging should not happen to avoid getting stuck or interfering with clicking/selecting.
+    const handlePointerDown = (e: React.PointerEvent) => {
+        if (e.pointerType !== 'touch') return
+        touchStartXRef.current = e.clientX
+        touchStartYRef.current = e.clientY
+        isSwipingRef.current = false
+    }
+
+    const handlePointerMove = (e: React.PointerEvent, msgId: number) => {
+        if (e.pointerType !== 'touch' || touchStartXRef.current === 0) return
+        const deltaX = e.clientX - touchStartXRef.current
+        const deltaY = e.clientY - touchStartYRef.current
+        // If swiping horizontally to the right
+        if (deltaX > 8 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+            isSwipingRef.current = true
+            setSwipingMsgId(msgId)
+            const offset = Math.min(deltaX * 0.45, 55)
+            setSwipeOffset(offset)
+        }
+    }
+
+    const handlePointerUp = (msg: IMessage, decryptedText: string, senderName: string) => {
+        if (isSwipingRef.current && swipingMsgId === msg.id) {
+            if (swipeOffset >= 35) {
+                handleStartReply(msg, decryptedText, senderName)
+                if (navigator.vibrate) navigator.vibrate(12)
+            }
+        }
+        touchStartXRef.current = 0
+        touchStartYRef.current = 0
+        setSwipingMsgId(null)
+        setSwipeOffset(0)
+        isSwipingRef.current = false
+    }
+
+    const handlePointerCancel = () => {
+        touchStartXRef.current = 0
+        touchStartYRef.current = 0
+        setSwipingMsgId(null)
+        setSwipeOffset(0)
+        isSwipingRef.current = false
+    }
+
+    // Safety: ensure message is never stuck translated on window release
+    useEffect(() => {
+        const handleGlobalRelease = () => {
+            if (isSwipingRef.current || swipingMsgId !== null) {
+                setSwipingMsgId(null)
+                setSwipeOffset(0)
+                isSwipingRef.current = false
+                touchStartXRef.current = 0
+                touchStartYRef.current = 0
+            }
+        }
+        window.addEventListener("pointerup", handleGlobalRelease)
+        window.addEventListener("pointercancel", handleGlobalRelease)
+        window.addEventListener("touchend", handleGlobalRelease)
+        window.addEventListener("touchcancel", handleGlobalRelease)
+        return () => {
+            window.removeEventListener("pointerup", handleGlobalRelease)
+            window.removeEventListener("pointercancel", handleGlobalRelease)
+            window.removeEventListener("touchend", handleGlobalRelease)
+            window.removeEventListener("touchcancel", handleGlobalRelease)
+        }
+    }, [swipingMsgId])
+
+    const formatReplySnippet = (raw: string) => {
+        if (!raw) return "Message"
+        try {
+            if (raw.startsWith("{") && raw.endsWith("}")) {
+                const parsed = JSON.parse(raw)
+                if (parsed.type === "image") return "📷 Photo"
+                if (parsed.type === "audio") return "🎤 Voice message"
+                if (parsed.type === "document" || parsed.type === "file") return `📄 ${parsed.name || "Attachment"}`
+                if (parsed.type === "call" || parsed.type === "call_log") return "📞 Call"
+                if (parsed.caption) return parsed.caption
+                if (parsed.text) return parsed.text
+                if (parsed.ciphertext) return "🔒 Encrypted message"
+            }
+        } catch {}
+        return raw || "Message"
+    }
 
     useEffect(() => {
         const handleDocumentClick = (e: MouseEvent | TouchEvent) => {
@@ -401,6 +530,33 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         return safeDecrypted
     }, [partnerPublicKey, myKeys])
 
+    // Helper to decrypt raw reply_to content (e.g. from server/socket payload)
+    const decryptRawContent = useCallback((raw: string, targetId?: number): string => {
+        if (!raw) return ""
+        if (targetId) {
+            const found = messages.find(m => m.id === targetId)
+            if (found) {
+                return decryptMessage(found)
+            }
+        }
+        const cacheKey = `raw_${raw}`
+        if (decryptCache.current.has(cacheKey)) {
+            return decryptCache.current.get(cacheKey)!
+        }
+        let decrypted: string = raw
+        try {
+            if (raw.startsWith("{") && raw.includes('"c":') && raw.includes('"n":')) {
+                const parsed = JSON.parse(raw) as EncryptedMessage
+                if (parsed.c && parsed.n && partnerPublicKey && myKeys?.secretKey) {
+                    const res = decryptDirectMessage(parsed, partnerPublicKey, myKeys.secretKey)
+                    if (res) decrypted = res
+                }
+            }
+        } catch {}
+        decryptCache.current.set(cacheKey, decrypted)
+        return decrypted
+    }, [messages, decryptMessage, partnerPublicKey, myKeys])
+
     // ── search within conversation ───────────────────────────────────────
     const matchingMessageIds = useMemo(() => {
         if (!searchQuery.trim()) return []
@@ -651,12 +807,23 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             finalContent = JSON.stringify(encrypted)
         }
 
+        const currentReply = replyingTo
         const optimisticMsg: IMessage = {
             id: -Date.now(),
             content: finalContent,
             sender_id: authUser?.id ?? 0,
             receiver_id: user.id,
             conversation_id: activeConvRef.current || conversation?.id || 0,
+            reply_to_id: currentReply?.id || null,
+            reply_to: currentReply
+                ? {
+                      id: currentReply.id,
+                      content: currentReply.content,
+                      sender_id: currentReply.sender_id,
+                      created_at: new Date().toISOString(),
+                      sender: { id: currentReply.sender_id, name: currentReply.sender_name },
+                  }
+                : null,
             created_at: new Date().toISOString(),
             is_seen: false,
             is_pending: true,
@@ -664,6 +831,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         }
 
         sendMessage(user.id, finalContent, optimisticMsg)
+        setReplyingTo(null)
     }
 
     // ── send text message ──────────────────────────────────────────────────
@@ -1070,7 +1238,7 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
             {/* messages scroll stream */}
             <div
                 ref={scrollContainerRef}
-                className={`flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4 custom-scrollbar transition-opacity duration-150 ${isChatReady || messages.length === 0 ? "opacity-100" : "opacity-0"
+                className={`flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-5 space-y-4 custom-scrollbar transition-opacity duration-150 ${isChatReady || messages.length === 0 ? "opacity-100" : "opacity-0"
                     }`}
             >
                 <div ref={topRef} className="h-1" />
@@ -1294,6 +1462,20 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                 >
                                                     <Star size={12} className={isStarred ? "fill-amber-400 text-amber-500" : ""} />
                                                 </button>
+
+                                                {/* Reply button (WhatsApp style) */}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        handleStartReply(msg, decryptedContent, isMine ? "You" : user.name)
+                                                        setHoveredMsgId(null)
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 rounded-full transition-colors"
+                                                    title="Reply to message"
+                                                >
+                                                    <Reply size={12} className="rotate-180" />
+                                                </button>
                                             </div>
 
                                             {/* Full Emoji Picker Popover for reactions */}
@@ -1316,8 +1498,51 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                             )}
                                         </div>
 
-                                        {/* bubble */}
-                                        <div className="relative inline-block">
+                                        {/* bubble with WhatsApp swipe-to-reply (supports touch & mouse drag) */}
+                                        <div
+                                            onPointerDown={(e) => handlePointerDown(e)}
+                                            onPointerMove={(e) => handlePointerMove(e, msg.id)}
+                                            onPointerUp={() => handlePointerUp(msg, decryptedContent, isMine ? "You" : user.name)}
+                                            onPointerCancel={handlePointerCancel}
+                                            style={{
+                                                transform: swipingMsgId === msg.id ? `translateX(${swipeOffset}px)` : undefined,
+                                                transition: swipingMsgId === msg.id ? "none" : "transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1)",
+                                                touchAction: "pan-y"
+                                            }}
+                                            className="relative inline-block max-w-full touch-pan-y"
+                                        >
+                                            {/* Swipe reply indicator popping in from left */}
+                                            {swipingMsgId === msg.id && (
+                                                <div
+                                                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full pr-3 flex items-center justify-center pointer-events-none"
+                                                    style={{
+                                                        opacity: Math.min(swipeOffset / 30, 1),
+                                                        transform: `translateY(-50%) scale(${Math.min(0.6 + (swipeOffset / 35) * 0.5, 1.15)})`
+                                                    }}
+                                                >
+                                                    <div className="h-7 w-7 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/30">
+                                                        <Reply size={14} className="rotate-180 stroke-[2.5]" />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Quoted reply box for media attachments */}
+                                            {msg.reply_to && (isImage || isAudio || isDoc) && (
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        scrollToMessage(msg.reply_to!.id)
+                                                    }}
+                                                    className={`mb-1.5 px-3 py-1.5 rounded-xl border-l-[3.5px] text-xs cursor-pointer select-none transition-all hover:opacity-90 active:scale-[0.99] max-w-full overflow-hidden ${isMine
+                                                        ? "bg-purple-950/40 border-purple-300 text-purple-100"
+                                                        : "bg-white dark:bg-slate-800 border-purple-500 text-slate-700 dark:text-slate-300 shadow-2xs"
+                                                        }`}
+                                                >
+                                                    <p className="truncate text-[11px] opacity-90 font-medium">
+                                                        {formatReplySnippet(decryptRawContent(msg.reply_to.content, msg.reply_to.id))}
+                                                    </p>
+                                                </div>
+                                            )}
                                             {isImage ? (
                                                 <ImageBubble
                                                     url={richPayload!.url!}
@@ -1355,6 +1580,23 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                                                     ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
                                                     : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
                                                     }`}>
+                                                    {/* Quoted reply box nested inside text bubble */}
+                                                    {msg.reply_to && (
+                                                        <div
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                scrollToMessage(msg.reply_to!.id)
+                                                            }}
+                                                            className={`mb-2 px-3 py-1.5 rounded-lg border-l-[3.5px] text-xs cursor-pointer select-none transition-all hover:opacity-90 active:scale-[0.99] max-w-full overflow-hidden ${isMine
+                                                                ? "bg-black/20 border-white/85 text-white/95"
+                                                                : "bg-purple-500/10 dark:bg-purple-950/40 border-purple-500 text-slate-800 dark:text-slate-200"
+                                                                }`}
+                                                        >
+                                                            <p className="truncate text-[11px] opacity-90 font-medium">
+                                                                {formatReplySnippet(decryptRawContent(msg.reply_to.content, msg.reply_to.id))}
+                                                            </p>
+                                                        </div>
+                                                    )}
                                                     <RichTextRenderer content={decryptedContent} isMine={isMine} />
 
                                                     <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] tabular-nums ${isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
@@ -1564,35 +1806,40 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
                         </Button>
                     </div>
                 ) : (
-                    <div className="relative flex items-center gap-2 max-w-4xl mx-auto">
-                        {/* Input Emoji Picker Popover */}
-                        {isRecordingAudio ? (
-                            <AudioRecorderBar
-                                onSendAudio={handleSendAudioNote}
-                                onCancel={() => setIsRecordingAudio(false)}
-                                isUploading={isUploadingMedia}
-                            />
-                        ) : (
-                            <RichMessageInput
-                                placeholder={`Message ${user.name}...`}
-                                value={input}
-                                onChange={handleTyping}
-                                onSend={handleSend}
-                                onSendPhoto={handleSendPhoto}
-                                onSendPdf={handleSendPdf}
-                                onStartVoiceRecording={() => setIsRecordingAudio(true)}
-                                isUploading={isUploadingMedia}
-                                uploadingFile={uploadingFile}
-                                disabled={iBlocked || iAmRejected}
-                                disabledReason={
-                                    iBlocked
-                                        ? "You have blocked this user"
-                                        : iAmRejected
-                                            ? "You cannot send messages to this user"
-                                            : undefined
-                                }
-                            />
-                        )}
+                    <div className="relative flex flex-col gap-0 max-w-4xl mx-auto w-full">
+                        {/* Reply Preview Bar above input */}
+                        <ReplyPreviewBar replyingTo={replyingTo} onCancel={() => setReplyingTo(null)} isDirect={true} />
+
+                        <div className="relative flex items-center gap-2 w-full">
+                            {/* Input Emoji Picker Popover */}
+                            {isRecordingAudio ? (
+                                <AudioRecorderBar
+                                    onSendAudio={handleSendAudioNote}
+                                    onCancel={() => setIsRecordingAudio(false)}
+                                    isUploading={isUploadingMedia}
+                                />
+                            ) : (
+                                <RichMessageInput
+                                    placeholder={`Message ${user.name}...`}
+                                    value={input}
+                                    onChange={handleTyping}
+                                    onSend={handleSend}
+                                    onSendPhoto={handleSendPhoto}
+                                    onSendPdf={handleSendPdf}
+                                    onStartVoiceRecording={() => setIsRecordingAudio(true)}
+                                    isUploading={isUploadingMedia}
+                                    uploadingFile={uploadingFile}
+                                    disabled={iBlocked || iAmRejected}
+                                    disabledReason={
+                                        iBlocked
+                                            ? "You have blocked this user"
+                                            : iAmRejected
+                                                ? "You cannot send messages to this user"
+                                                : undefined
+                                    }
+                                />
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

@@ -4,7 +4,7 @@ import {
     Shield, ShieldOff, LogOut, ChevronRight, Link2, Check, 
     Copy, ChevronLeft, X, Lock, Loader2, Video, Phone, Search, 
     Smile, Star, ChevronUp, ChevronDown, Camera, Pencil, Settings, 
-    FileText, Image as ImageIcon, Clock, AlertCircle
+    FileText, Image as ImageIcon, Clock, AlertCircle, Reply
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSelector } from "react-redux"
@@ -36,6 +36,7 @@ import AudioRecorderBar from "@/pages/chat/components/media/AudioRecorderBar"
 import ImageBubble from "@/pages/chat/components/media/ImageBubble"
 import RichTextRenderer from "@/pages/chat/components/RichTextRenderer"
 import RichMessageInput from "@/pages/chat/components/input/RichMessageInput"
+import ReplyPreviewBar from "./ReplyPreviewBar"
 
 interface Props {
     group: IGroup
@@ -165,6 +166,134 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
 
     const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null)
     const [moreEmojiMsgId, setMoreEmojiMsgId] = useState<number | null>(null)
+
+    // Chat reply state
+    const [replyingTo, setReplyingTo] = useState<{
+        id: number
+        sender_id: number
+        sender_name: string
+        content: string
+    } | null>(null)
+    const [swipingMsgId, setSwipingMsgId] = useState<number | null>(null)
+    const [swipeOffset, setSwipeOffset] = useState<number>(0)
+    const touchStartXRef = useRef<number>(0)
+    const touchStartYRef = useRef<number>(0)
+    const isSwipingRef = useRef<boolean>(false)
+
+    // Close reply on Escape
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && replyingTo) {
+                setReplyingTo(null)
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown)
+        return () => window.removeEventListener("keydown", handleKeyDown)
+    }, [replyingTo])
+
+    const handleStartReply = useCallback((msg: IGroupMessage, decryptedText: string, senderName: string) => {
+        setReplyingTo({
+            id: msg.id,
+            sender_id: msg.sender_id || 0,
+            sender_name: senderName,
+            content: decryptedText,
+        })
+    }, [])
+
+    const scrollToMessage = useCallback((targetId: number) => {
+        const el = document.getElementById(`group-msg-${targetId}`)
+        if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" })
+            el.classList.add("ring-2", "ring-purple-500", "ring-offset-2")
+            setTimeout(() => {
+                el.classList.remove("ring-2", "ring-purple-500", "ring-offset-2")
+            }, 1800)
+        }
+    }, [])
+
+    // Only enable touch swipe gesture on touchscreens/mobile devices.
+    // On desktop, mouse dragging should not happen to avoid getting stuck or interfering with clicking/selecting.
+    const handlePointerDown = (e: React.PointerEvent) => {
+        if (e.pointerType !== 'touch') return
+        touchStartXRef.current = e.clientX
+        touchStartYRef.current = e.clientY
+        isSwipingRef.current = false
+    }
+
+    const handlePointerMove = (e: React.PointerEvent, msgId: number) => {
+        if (e.pointerType !== 'touch' || touchStartXRef.current === 0) return
+        const deltaX = e.clientX - touchStartXRef.current
+        const deltaY = e.clientY - touchStartYRef.current
+        // If swiping horizontally to the right
+        if (deltaX > 8 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+            isSwipingRef.current = true
+            setSwipingMsgId(msgId)
+            const offset = Math.min(deltaX * 0.45, 55)
+            setSwipeOffset(offset)
+        }
+    }
+
+    const handlePointerUp = (msg: IGroupMessage, decryptedText: string, senderName: string) => {
+        if (isSwipingRef.current && swipingMsgId === msg.id) {
+            if (swipeOffset >= 35) {
+                handleStartReply(msg, decryptedText, senderName)
+                if (navigator.vibrate) navigator.vibrate(12)
+            }
+        }
+        touchStartXRef.current = 0
+        touchStartYRef.current = 0
+        setSwipingMsgId(null)
+        setSwipeOffset(0)
+        isSwipingRef.current = false
+    }
+
+    const handlePointerCancel = () => {
+        touchStartXRef.current = 0
+        touchStartYRef.current = 0
+        setSwipingMsgId(null)
+        setSwipeOffset(0)
+        isSwipingRef.current = false
+    }
+
+    // Safety: ensure message is never stuck translated on window release
+    useEffect(() => {
+        const handleGlobalRelease = () => {
+            if (isSwipingRef.current || swipingMsgId !== null) {
+                setSwipingMsgId(null)
+                setSwipeOffset(0)
+                isSwipingRef.current = false
+                touchStartXRef.current = 0
+                touchStartYRef.current = 0
+            }
+        }
+        window.addEventListener("pointerup", handleGlobalRelease)
+        window.addEventListener("pointercancel", handleGlobalRelease)
+        window.addEventListener("touchend", handleGlobalRelease)
+        window.addEventListener("touchcancel", handleGlobalRelease)
+        return () => {
+            window.removeEventListener("pointerup", handleGlobalRelease)
+            window.removeEventListener("pointercancel", handleGlobalRelease)
+            window.removeEventListener("touchend", handleGlobalRelease)
+            window.removeEventListener("touchcancel", handleGlobalRelease)
+        }
+    }, [swipingMsgId])
+
+    const formatReplySnippet = (raw: string) => {
+        if (!raw) return "Message"
+        try {
+            if (raw.startsWith("{") && raw.endsWith("}")) {
+                const parsed = JSON.parse(raw)
+                if (parsed.type === "image") return "📷 Photo"
+                if (parsed.type === "audio") return "🎤 Voice message"
+                if (parsed.type === "document" || parsed.type === "file") return `📄 ${parsed.name || "Attachment"}`
+                if (parsed.type === "call" || parsed.type === "call_log") return "📞 Call"
+                if (parsed.caption) return parsed.caption
+                if (parsed.text) return parsed.text
+                if (parsed.ciphertext) return "🔒 Encrypted message"
+            }
+        } catch {}
+        return raw || "Message"
+    }
 
     // Chat search state
     const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -400,6 +529,22 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         return decrypted
     }, [groupDetail?.members, myKeys, authUser?.id])
 
+    // Helper to decrypt raw group reply_to content
+    const decryptGroupRawContent = useCallback((raw: string, targetId?: number): string => {
+        if (!raw) return ""
+        if (targetId) {
+            const found = messages.find(m => m.id === targetId)
+            if (found) {
+                const dec = decryptMessage(found)
+                if (dec) return dec
+            }
+        }
+        if (decryptCache.current.has(`raw_${raw}`)) {
+            return decryptCache.current.get(`raw_${raw}`)!
+        }
+        return raw
+    }, [messages, decryptMessage])
+
     // ── search within group conversation ─────────────────────────────────
     const matchingMessageIds = useMemo(() => {
         if (!searchQuery.trim()) return []
@@ -631,6 +776,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             })
         }
 
+        const currentReply = replyingTo
         const optimisticMsg: IGroupMessage = {
             id: -Date.now(),
             group_id: group.id,
@@ -638,6 +784,16 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             content: finalContent,
             type: "text",
             encrypted_keys: encryptedKeys,
+            reply_to_id: currentReply?.id || null,
+            reply_to: currentReply
+                ? {
+                      id: currentReply.id,
+                      content: currentReply.content,
+                      sender_id: currentReply.sender_id,
+                      created_at: new Date().toISOString(),
+                      sender: { id: currentReply.sender_id, name: currentReply.sender_name },
+                  }
+                : null,
             created_at: new Date().toISOString(),
             is_pending: true,
             status: "pending",
@@ -649,6 +805,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
         }
 
         sendMessage(finalContent, encryptedKeys, optimisticMsg)
+        setReplyingTo(null)
     }
 
     // ── send text message ──────────────────────────────────────────────────
@@ -1042,7 +1199,7 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
             {/* messages area */}
             <div 
                 ref={scrollContainerRef}
-                className={`flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4 custom-scrollbar transition-opacity duration-150 ${
+                className={`flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-5 space-y-4 custom-scrollbar transition-opacity duration-150 ${
                     isChatReady || messages.length === 0 ? "opacity-100" : "opacity-0"
                 }`}
             >
@@ -1258,6 +1415,20 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                                 >
                                                     <Star size={12} className={isStarred ? "fill-amber-400 text-amber-500" : ""} />
                                                 </button>
+
+                                                {/* Reply button (WhatsApp style) */}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        handleStartReply(msg, decryptedContent, isMine ? "You" : (msg.sender?.name || "Member"))
+                                                        setHoveredMsgId(null)
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 rounded-full transition-colors"
+                                                    title="Reply to message"
+                                                >
+                                                    <Reply size={12} className="rotate-180" />
+                                                </button>
                                             </div>
 
                                             {/* Full Emoji Picker Popover */}
@@ -1287,8 +1458,56 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                             </p>
                                         )}
 
-                                        {/* bubble */}
-                                        <div className="relative inline-block">
+                                        {/* bubble with WhatsApp swipe-to-reply (supports touch & mouse drag) */}
+                                        <div
+                                            onPointerDown={(e) => handlePointerDown(e)}
+                                            onPointerMove={(e) => handlePointerMove(e, msg.id)}
+                                            onPointerUp={() => handlePointerUp(msg, decryptedContent, isMine ? "You" : (msg.sender?.name || "Member"))}
+                                            onPointerCancel={handlePointerCancel}
+                                            style={{
+                                                transform: swipingMsgId === msg.id ? `translateX(${swipeOffset}px)` : undefined,
+                                                transition: swipingMsgId === msg.id ? "none" : "transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1)",
+                                                touchAction: "pan-y"
+                                            }}
+                                            className="relative inline-block max-w-full touch-pan-y"
+                                        >
+                                            {/* Swipe reply indicator popping in from left */}
+                                            {swipingMsgId === msg.id && (
+                                                <div
+                                                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full pr-3 flex items-center justify-center pointer-events-none"
+                                                    style={{
+                                                        opacity: Math.min(swipeOffset / 30, 1),
+                                                        transform: `translateY(-50%) scale(${Math.min(0.6 + (swipeOffset / 35) * 0.5, 1.15)})`
+                                                    }}
+                                                >
+                                                    <div className="h-7 w-7 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/30">
+                                                        <Reply size={14} className="rotate-180 stroke-[2.5]" />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Quoted reply box for media attachments */}
+                                            {msg.reply_to && (isImage || isAudio || isDoc) && (
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        scrollToMessage(msg.reply_to!.id)
+                                                    }}
+                                                    className={`mb-1.5 px-3 py-1.5 rounded-xl border-l-[3.5px] text-xs cursor-pointer select-none transition-all hover:opacity-90 active:scale-[0.99] max-w-full overflow-hidden ${
+                                                        isMine
+                                                            ? "bg-purple-950/40 border-purple-300 text-purple-100"
+                                                            : "bg-white dark:bg-slate-800 border-purple-500 text-slate-700 dark:text-slate-300 shadow-2xs"
+                                                    }`}
+                                                >
+                                                    <p className="font-bold text-[11px] text-purple-400 dark:text-purple-300 truncate mb-0.5">
+                                                        {msg.reply_to.sender?.name || (msg.reply_to.sender_id === authUser?.id ? "You" : "Member")}
+                                                    </p>
+                                                    <p className="truncate text-[11px] opacity-90 font-medium">
+                                                        {formatReplySnippet(decryptGroupRawContent(msg.reply_to.content, msg.reply_to.id))}
+                                                    </p>
+                                                </div>
+                                            )}
+
                                             {isImage ? (
                                                 <ImageBubble
                                                     url={richPayload!.url}
@@ -1324,6 +1543,27 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                                                         ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-purple-600/10"
                                                         : "bg-white dark:bg-[#1a233a] text-slate-900 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-2xl rounded-tl-xs"
                                                 }`}>
+                                                    {/* Quoted reply box nested inside text bubble */}
+                                                    {msg.reply_to && (
+                                                        <div
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                scrollToMessage(msg.reply_to!.id)
+                                                            }}
+                                                            className={`mb-2 px-3 py-1.5 rounded-lg border-l-[3.5px] text-xs cursor-pointer select-none transition-all hover:opacity-90 active:scale-[0.99] max-w-full overflow-hidden ${
+                                                                isMine
+                                                                    ? "bg-black/20 border-white/85 text-white/95"
+                                                                    : "bg-purple-500/10 dark:bg-purple-950/40 border-purple-500 text-slate-800 dark:text-slate-200"
+                                                            }`}
+                                                        >
+                                                            <p className="font-bold text-[11px] text-purple-300 dark:text-purple-400 truncate mb-0.5">
+                                                                {msg.reply_to.sender?.name || (msg.reply_to.sender_id === authUser?.id ? "You" : "Member")}
+                                                            </p>
+                                                            <p className="truncate text-[11px] opacity-90 font-medium">
+                                                                {formatReplySnippet(decryptGroupRawContent(msg.reply_to.content, msg.reply_to.id))}
+                                                            </p>
+                                                        </div>
+                                                    )}
                                                     <RichTextRenderer content={decryptedContent} isMine={isMine} />
                                                     <div className={`text-[10px] tabular-nums mt-1 flex items-center justify-end gap-1 ${
                                                         isMine ? "text-purple-200/90" : "text-slate-400 dark:text-slate-500"
@@ -1431,26 +1671,31 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
                         </p>
                     </div>
                 ) : (
-                    <div className="relative flex items-center gap-2 max-w-4xl mx-auto">
-                        {isRecordingAudio ? (
-                            <AudioRecorderBar
-                                onSendAudio={handleSendAudioNote}
-                                onCancel={() => setIsRecordingAudio(false)}
-                                isUploading={isUploadingMedia}
-                            />
-                        ) : (
-                            <RichMessageInput
-                                placeholder={`Message ${liveGroup.name}...`}
-                                value={input}
-                                onChange={handleTyping}
-                                onSend={handleSend}
-                                onSendPhoto={handleSendPhoto}
-                                onSendPdf={handleSendPdf}
-                                onStartVoiceRecording={() => setIsRecordingAudio(true)}
-                                isUploading={isUploadingMedia}
-                                uploadingFile={uploadingFile}
-                            />
-                        )}
+                    <div className="relative flex flex-col gap-0 max-w-4xl mx-auto w-full">
+                        {/* Reply Preview Bar above input */}
+                        <ReplyPreviewBar replyingTo={replyingTo} onCancel={() => setReplyingTo(null)} />
+
+                        <div className="relative flex items-center gap-2 w-full">
+                            {isRecordingAudio ? (
+                                <AudioRecorderBar
+                                    onSendAudio={handleSendAudioNote}
+                                    onCancel={() => setIsRecordingAudio(false)}
+                                    isUploading={isUploadingMedia}
+                                />
+                            ) : (
+                                <RichMessageInput
+                                    placeholder={`Message ${liveGroup.name}...`}
+                                    value={input}
+                                    onChange={handleTyping}
+                                    onSend={handleSend}
+                                    onSendPhoto={handleSendPhoto}
+                                    onSendPdf={handleSendPdf}
+                                    onStartVoiceRecording={() => setIsRecordingAudio(true)}
+                                    isUploading={isUploadingMedia}
+                                    uploadingFile={uploadingFile}
+                                />
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

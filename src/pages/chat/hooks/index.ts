@@ -27,12 +27,25 @@ export interface IStarredItem {
     group_message_id?: number | null
 }
 
+export interface IReplyPreview {
+    id: number
+    content: string
+    sender_id: number
+    created_at?: string
+    sender?: {
+        id: number
+        name: string
+    }
+}
+
 export interface IMessage {
     id: number
     content: string
     sender_id: number
     receiver_id: number
     conversation_id: number
+    reply_to_id?: number | null
+    reply_to?: IReplyPreview | null
     created_at: string
     is_seen?: boolean
     is_pending?: boolean
@@ -291,7 +304,7 @@ export const useChat = ({
         if (!socket) return
         socket.timeout(10000).emit(
             CHAT_EVENTS.SEND_MESSAGE,
-            { receiverId: targetMsg.receiver_id, content: targetMsg.content },
+            { receiverId: targetMsg.receiver_id, content: targetMsg.content, reply_to_id: targetMsg.reply_to_id },
             (err: any, res: any) => {
                 if (err || (res && !res.success)) {
                     setMessages((prev) =>
@@ -407,6 +420,8 @@ export interface IGroupMessage {
     sender_id: number | null
     content: string
     type: "text" | "system"
+    reply_to_id?: number | null
+    reply_to?: IReplyPreview | null
     encrypted_keys?: Record<number, EncryptedMessage>
     created_at: string
     is_pending?: boolean
@@ -608,7 +623,7 @@ export const useGroupChat = ({ socket, groupId, currentUserId, initialMessages, 
         if (!socket) return
         socket.timeout(10000).emit(
             GROUP_EVENTS.SEND_MESSAGE,
-            { groupId: targetMsg.group_id, content: targetMsg.content, encrypted_keys: targetMsg.encrypted_keys },
+            { groupId: targetMsg.group_id, content: targetMsg.content, encrypted_keys: targetMsg.encrypted_keys, reply_to_id: targetMsg.reply_to_id },
             (err: any, res: any) => {
                 if (err || (res && !res.success)) {
                     setMessages((prev) =>
