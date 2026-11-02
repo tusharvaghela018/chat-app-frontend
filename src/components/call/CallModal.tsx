@@ -40,7 +40,6 @@ export const CallModal: React.FC = () => {
 
     const localVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
-    const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
     // Bind local media stream to local video element
     useEffect(() => {
@@ -49,15 +48,11 @@ export const CallModal: React.FC = () => {
         }
     }, [localStream, callStatus]);
 
-    // Bind remote media stream to remote video & audio elements
+    // Bind remote media stream to remote video element (audio is managed centrally in CallContext)
     useEffect(() => {
         if (remoteVideoRef.current && remoteStream) {
             remoteVideoRef.current.srcObject = remoteStream;
             remoteVideoRef.current.play().catch(() => {});
-        }
-        if (remoteAudioRef.current && remoteStream) {
-            remoteAudioRef.current.srcObject = remoteStream;
-            remoteAudioRef.current.play().catch(() => {});
         }
     }, [remoteStream, callStatus]);
 
@@ -78,8 +73,6 @@ export const CallModal: React.FC = () => {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-xl animate-in fade-in duration-200">
-            {/* Hidden audio element for audio playback */}
-            <audio ref={remoteAudioRef} autoPlay playsInline />
 
             <div className="relative w-full max-w-4xl h-[92vh] max-h-[720px] rounded-3xl bg-[#090e1a] border border-slate-800 shadow-2xl overflow-hidden flex flex-col justify-between select-none">
                 {/* ── TOP HEADER BAR ──────────────────────────────────── */}

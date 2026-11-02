@@ -39,34 +39,108 @@ interface CallContextType {
     switchCamera: () => Promise<void>;
 }
 
+// Low-latency, fast-resolving STUN & TURN servers
 const ICE_SERVERS: RTCConfiguration = {
     iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" },
-        { urls: "stun:stun3.l.google.com:19302" },
-        { urls: "stun:stun4.l.google.com:19302" },
-        { urls: "stun:global.stun.twilio.com:3478" },
-        // Public open-relay TURN servers so peers behind symmetric NATs or firewalls can connect
+        { urls: "stun:stun.cloudflare.com:3478" },
+        // Fallback open-relay TURN server for restrictive symmetric NATs
         {
             urls: [
-                "turn:openrelay.metered.ca:80",
                 "turn:openrelay.metered.ca:443",
-                "turn:openrelay.metered.ca:443?transport=tcp",
+                "turn:openrelay.metered.ca:80",
             ],
             username: "openrelay",
             credential: "openrelay",
         },
     ],
-    iceCandidatePoolSize: 10,
+    iceCandidatePoolSize: 0, // 0 = gather on demand, prevents 3-5 second connection hang!
     bundlePolicy: "max-bundle",
     rtcpMuxPolicy: "require",
+    iceTransportPolicy: "all",
 };
 
+// High-definition 48kHz audio constraints with active echo cancellation & noise suppression
 const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
+    echoCancellation: { ideal: true },
+    noiseSuppression: { ideal: true },
+    autoGainControl: { ideal: true },
+    channelCount: { ideal: 1 },
+    sampleRate: { ideal: 48000 },
+    sampleSize: { ideal: 16 },
+    // Voice clarity enhancements for Chromium-based browsers
+    googEchoCancellation: { ideal: true },
+    googAutoGainControl: { ideal: true },
+    googNoiseSuppression: { ideal: true },
+    googHighpassFilter: { ideal: true },
+    googAudioMirroring: { ideal: false },
+} as any;
+
+const getVideoConstraints = (facing: "user" | "environment" = "user"): MediaTrackConstraints => ({
+    width: { ideal: 1280, max: 1280 },
+    height: { ideal: 720, max: 720 },
+    frameRate: { ideal: 30, max: 30 },
+    facingMode: { ideal: facing },
+});
+
+// Helper to optimize SDP for crystal-clear Opus audio and low latency
+function optimizeSdp(sdp: string): string {
+    let modified = sdp;
+    // Boost Opus audio parameters:
+    // - useinbandfec=1 : enables forward error correction so audio doesn't stutter on packet loss
+    // - maxaveragebitrate=64000 : studio speech clarity (64 kbps Opus)
+    // - stereo=0 : dedicated mono channel for crystal clear voice without phase cancellation
+    // - cbr=0 : dynamic VBR for bandwidth efficiency
+    // - minptime=10 : permits 10ms packets for ultra-low latency audio
+    if (modified.includes("opus/48000")) {
+        modified = modified.replace(
+            /(a=rtpmap:(\d+) opus\/48000\/2[\s\S]*?)(a=fmtp:\2\s+)(.*)/,
+            (_match, p1, _pt, p3, p4) => {
+                let params = p4.trim();
+                const neededParams = [
+                    "useinbandfec=1",
+                    "minptime=10",
+                    "maxaveragebitrate=64000",
+                    "stereo=0",
+                    "cbr=0",
+                ];
+                neededParams.forEach((param) => {
+                    const key = param.split("=")[0];
+                    if (!params.includes(key)) {
+                        params += `;${param}`;
+                    }
+                });
+                return `${p1}${p3}${params}`;
+            }
+        );
+    }
+    return modified;
+}
+
+// Configure RTCRtpSender for optimal bitrate, framerate, and degradation preference
+const configureSenders = (pc: RTCPeerConnection) => {
+    pc.getSenders().forEach((sender) => {
+        if (!sender.track) return;
+        try {
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+                params.encodings = [{}];
+            }
+            if (sender.track.kind === "audio") {
+                params.encodings[0].maxBitrate = 64000;
+                params.encodings[0].priority = "high";
+                params.encodings[0].networkPriority = "high";
+            } else if (sender.track.kind === "video") {
+                params.encodings[0].maxBitrate = 1500000; // 1.5 Mbps ideal for 720p 30fps
+                params.encodings[0].maxFramerate = 30;
+                params.degradationPreference = "maintain-framerate"; // low-latency, avoid buffering lag
+            }
+            sender.setParameters(params).catch(() => {});
+        } catch {
+            // Ignore if sender not ready
+        }
+    });
 };
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -95,11 +169,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const pcRef = useRef<RTCPeerConnection | null>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
+    const remoteStreamRef = useRef<MediaStream>(new MediaStream());
+    const incomingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
     const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
     const durationIntervalRef = useRef<any>(null);
     const persistentAudioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Persistent audio player across entire session (works even when CallModal is minimized)
+    // Persistent audio player across entire session (works in both full modal and minimized mode)
     useEffect(() => {
         if (!persistentAudioRef.current) {
             const el = new Audio();
@@ -110,10 +186,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const el = persistentAudioRef.current;
         if (remoteStream && callStatus === "connected") {
-            el.srcObject = remoteStream;
-            el.play().catch((err) => {
-                console.warn("Remote audio autoplay blocked by browser policy:", err);
-            });
+            const audioTracks = remoteStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                el.srcObject = remoteStream;
+                el.play().catch((err) => {
+                    console.warn("Remote audio autoplay blocked by browser policy:", err);
+                });
+            }
         } else if (el) {
             el.srcObject = null;
         }
@@ -151,6 +230,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             pcRef.current = null;
         }
 
+        remoteStreamRef.current = new MediaStream();
+        incomingOfferRef.current = null;
         pendingCandidatesRef.current = [];
         setLocalStream(null);
         setRemoteStream(null);
@@ -214,7 +295,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             pcRef.current = pc;
 
             pc.onicecandidate = (event) => {
-                if (event.candidate && socket) {
+                if (event.candidate && event.candidate.candidate && socket) {
                     const candidatePayload = event.candidate.toJSON
                         ? event.candidate.toJSON()
                         : {
@@ -244,33 +325,32 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             pc.onconnectionstatechange = () => {
                 console.log("WebRTC Connection State:", pc.connectionState);
+                if (pc.connectionState === "connected") {
+                    configureSenders(pc);
+                }
             };
 
             pc.ontrack = (event) => {
                 console.log("WebRTC ontrack received:", event.track.kind, event.streams);
 
-                let stream: MediaStream;
-                if (event.streams && event.streams[0]) {
-                    stream = event.streams[0];
-                } else {
-                    stream = new MediaStream([event.track]);
+                const currentStream = remoteStreamRef.current;
+                const existingTrack = currentStream.getTracks().find((t) => t.kind === event.track.kind);
+                if (existingTrack) {
+                    currentStream.removeTrack(existingTrack);
                 }
+                currentStream.addTrack(event.track);
 
-                // Force a new MediaStream instance so React state updates and video/audio elements trigger
-                setRemoteStream(new MediaStream(stream.getTracks()));
+                setRemoteStream(new MediaStream(currentStream.getTracks()));
 
                 // When track un-mutes (first RTP packet arrives), re-trigger stream binding
                 event.track.onunmute = () => {
                     console.log("WebRTC remote track un-muted:", event.track.kind);
-                    setRemoteStream(new MediaStream(stream.getTracks()));
+                    setRemoteStream(new MediaStream(remoteStreamRef.current.getTracks()));
                 };
 
-                stream.onaddtrack = () => {
-                    setRemoteStream(new MediaStream(stream.getTracks()));
-                };
-
-                stream.onremovetrack = () => {
-                    setRemoteStream(new MediaStream(stream.getTracks()));
+                event.track.onended = () => {
+                    remoteStreamRef.current.removeTrack(event.track);
+                    setRemoteStream(new MediaStream(remoteStreamRef.current.getTracks()));
                 };
             };
 
@@ -286,7 +366,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         [socket]
     );
 
-    // ── 1. Initiate Outgoing Call ──────────────────────────────────────────
+    // ── 1. Initiate Outgoing Call (Pipelined Early-Offer) ───────────────────
     const startCall = useCallback(
         async (targetUser: RemoteCaller, isVideo: boolean, convId?: number) => {
             if (!socket) return;
@@ -302,52 +382,97 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // Acquire camera/microphone with hardware echo cancellation & noise suppression
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: AUDIO_CONSTRAINTS,
-                    video: isVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
+                    video: isVideo ? getVideoConstraints("user") : false,
                 });
 
                 localStreamRef.current = stream;
                 setLocalStream(stream);
 
+                // Create PeerConnection & generate Early-Offer immediately
+                const pc = createPeerConnection(targetUser.id);
+                const rawOffer = await pc.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: isVideo,
+                });
+                const offer: RTCSessionDescriptionInit = {
+                    type: rawOffer.type,
+                    sdp: optimizeSdp(rawOffer.sdp || ""),
+                };
+                await pc.setLocalDescription(offer);
+                configureSenders(pc);
+
                 callAudio.playCallingTone();
 
+                // Send offer directly in INITIATE for instant connection upon answer
                 socket.emit(CALL_EVENTS.INITIATE, {
                     recipientId: targetUser.id,
                     isVideo,
                     conversationId: convId,
+                    sdp: pc.localDescription,
                 });
             } catch (err: any) {
                 console.error("Media permission or capture error:", err);
                 finishCallWithNotice("Camera or Microphone access was denied.", true);
             }
         },
-        [socket, cleanupCall, finishCallWithNotice]
+        [socket, cleanupCall, createPeerConnection, finishCallWithNotice]
     );
 
-    // ── 2. Accept Incoming Call ────────────────────────────────────────────
+    // ── 2. Accept Incoming Call (Pipelined Instant-Answer) ──────────────────
     const acceptCall = useCallback(async () => {
         if (!socket || !remoteUser) return;
         try {
             callAudio.stopAll();
+            // Unlock audio output on user gesture
+            persistentAudioRef.current?.play().catch(() => {});
+
             const isVideo = callType === "video";
 
             // Acquire camera/microphone with hardware echo cancellation & noise suppression
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: AUDIO_CONSTRAINTS,
-                video: isVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
+                video: isVideo ? getVideoConstraints(facingMode) : false,
             });
 
             localStreamRef.current = stream;
             setLocalStream(stream);
 
-            createPeerConnection(remoteUser.id);
+            const pc = createPeerConnection(remoteUser.id);
 
-            setCallStatus("connected");
-            socket.emit(CALL_EVENTS.ACCEPT, { callerId: remoteUser.id });
+            // Fast-path: If early offer arrived in CALL_EVENTS.INCOMING, answer immediately!
+            if (incomingOfferRef.current) {
+                await pc.setRemoteDescription(new RTCSessionDescription(incomingOfferRef.current));
+                const rawAnswer = await pc.createAnswer();
+                const answer: RTCSessionDescriptionInit = {
+                    type: rawAnswer.type,
+                    sdp: optimizeSdp(rawAnswer.sdp || ""),
+                };
+                await pc.setLocalDescription(answer);
+                configureSenders(pc);
+
+                // Drain candidates gathered while phone was ringing
+                while (pendingCandidatesRef.current.length > 0) {
+                    const cand = pendingCandidatesRef.current.shift();
+                    if (cand) {
+                        await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                    }
+                }
+
+                setCallStatus("connected");
+                socket.emit(CALL_EVENTS.ACCEPT, {
+                    callerId: remoteUser.id,
+                    sdp: pc.localDescription,
+                });
+            } else {
+                // Fallback: If no offer attached in INCOMING, send regular accept and await OFFER
+                setCallStatus("connected");
+                socket.emit(CALL_EVENTS.ACCEPT, { callerId: remoteUser.id });
+            }
         } catch (err: any) {
             console.error("Failed to accept call:", err);
             finishCallWithNotice("Could not access camera/mic.", true);
         }
-    }, [socket, remoteUser, callType, createPeerConnection, finishCallWithNotice]);
+    }, [socket, remoteUser, callType, facingMode, createPeerConnection, finishCallWithNotice]);
 
     // ── 3. Reject Incoming Call ────────────────────────────────────────────
     const rejectCall = useCallback(
@@ -439,8 +564,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         audio: false,
                         video: {
                             deviceId: { exact: nextDevice.deviceId },
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 },
+                            width: { ideal: 1280, max: 1280 },
+                            height: { ideal: 720, max: 720 },
+                            frameRate: { ideal: 30, max: 30 },
                         },
                     });
                 } catch {
@@ -451,11 +577,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!newStream) {
                 newStream = await navigator.mediaDevices.getUserMedia({
                     audio: false,
-                    video: {
-                        facingMode: { ideal: nextFacingMode },
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                    },
+                    video: getVideoConstraints(nextFacingMode),
                 });
             }
 
@@ -471,6 +593,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const videoSender = senders.find((s) => s.track && s.track.kind === "video");
                 if (videoSender) {
                     await videoSender.replaceTrack(newVideoTrack);
+                    configureSenders(pcRef.current);
                 }
             }
 
@@ -499,7 +622,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!socket) return;
 
         // Incoming call received
-        const handleIncoming = (data: { callerId: number; isVideo: boolean; conversationId?: number; callerInfo: RemoteCaller }) => {
+        const handleIncoming = (data: {
+            callerId: number;
+            isVideo: boolean;
+            conversationId?: number;
+            callerInfo: RemoteCaller;
+            sdp?: RTCSessionDescriptionInit;
+        }) => {
             if (callStatus !== "idle") {
                 // Busy: auto-reject
                 socket.emit(CALL_EVENTS.REJECT, { callerId: data.callerId, reason: "busy" });
@@ -511,33 +640,54 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCallType(data.isVideo ? "video" : "audio");
             setCallStatus("incoming");
             setIsVideoOff(!data.isVideo);
+            incomingOfferRef.current = data.sdp || null;
 
             callAudio.playRingtone();
         };
 
-        // Recipient accepted our call: create Offer
-        const handleAccepted = async (_data: { recipientId: number }) => {
+        // Recipient accepted our call
+        const handleAccepted = async (_data: { recipientId: number; sdp?: RTCSessionDescriptionInit }) => {
             callAudio.stopAll();
             setCallStatus("connected");
 
-            const targetId = _data?.recipientId || remoteUser?.id;
-            if (!targetId) return;
-            const pc = createPeerConnection(targetId);
+            const pc = pcRef.current;
+            if (!pc) return;
 
-            try {
-                const offer = await pc.createOffer({
-                    offerToReceiveAudio: true,
-                    offerToReceiveVideo: callType === "video",
-                });
-                await pc.setLocalDescription(offer);
+            // Fast-path: If recipient replied with answer SDP directly in ACCEPTED
+            if (_data?.sdp) {
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(_data.sdp));
+                    while (pendingCandidatesRef.current.length > 0) {
+                        const cand = pendingCandidatesRef.current.shift();
+                        if (cand) {
+                            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error setting remote description from fast-path accept:", err);
+                }
+            } else if (pc.signalingState === "stable") {
+                // Fallback: If no offer was set yet, create Offer now
+                try {
+                    const rawOffer = await pc.createOffer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: callType === "video",
+                    });
+                    const offer: RTCSessionDescriptionInit = {
+                        type: rawOffer.type,
+                        sdp: optimizeSdp(rawOffer.sdp || ""),
+                    };
+                    await pc.setLocalDescription(offer);
+                    configureSenders(pc);
 
-                socket.emit(CALL_EVENTS.OFFER, {
-                    targetUserId: targetId,
-                    sdp: pc.localDescription,
-                });
-            } catch (err) {
-                console.error("Error creating WebRTC offer:", err);
-                finishCallWithNotice("Connection failed.", true);
+                    socket.emit(CALL_EVENTS.OFFER, {
+                        targetUserId: _data?.recipientId || remoteUser?.id,
+                        sdp: pc.localDescription,
+                    });
+                } catch (err) {
+                    console.error("Error creating WebRTC offer:", err);
+                    finishCallWithNotice("Connection failed.", true);
+                }
             }
         };
 
@@ -556,7 +706,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             finishCallWithNotice(msg, true);
         };
 
-        // WebRTC Offer received (by recipient)
+        // WebRTC Offer received (by recipient via fallback)
         const handleOffer = async (data: { callerId: number; sdp: RTCSessionDescriptionInit }) => {
             let pc = pcRef.current;
             if (!pc) {
@@ -565,17 +715,20 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                const rawAnswer = await pc.createAnswer();
+                const answer: RTCSessionDescriptionInit = {
+                    type: rawAnswer.type,
+                    sdp: optimizeSdp(rawAnswer.sdp || ""),
+                };
+                await pc.setLocalDescription(answer);
+                configureSenders(pc);
 
-                // Process any ICE candidates that arrived before the offer
                 while (pendingCandidatesRef.current.length > 0) {
                     const cand = pendingCandidatesRef.current.shift();
                     if (cand) {
-                        await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
+                        await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
                     }
                 }
-
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
 
                 socket.emit(CALL_EVENTS.ANSWER, {
                     targetUserId: data.callerId,
@@ -592,12 +745,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!pc) return;
 
             try {
-                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                if (pc.signalingState === "have-local-offer") {
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
 
-                while (pendingCandidatesRef.current.length > 0) {
-                    const cand = pendingCandidatesRef.current.shift();
-                    if (cand) {
-                        await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
+                    while (pendingCandidatesRef.current.length > 0) {
+                        const cand = pendingCandidatesRef.current.shift();
+                        if (cand) {
+                            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                        }
                     }
                 }
             } catch (err) {
@@ -607,7 +762,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // ICE candidate received
         const handleIceCandidate = async (data: { senderId: number; candidate: RTCIceCandidateInit }) => {
-            if (!data?.candidate) return;
+            if (!data?.candidate || !data.candidate.candidate) return;
             const pc = pcRef.current;
             if (pc && pc.remoteDescription && pc.remoteDescription.type) {
                 try {
