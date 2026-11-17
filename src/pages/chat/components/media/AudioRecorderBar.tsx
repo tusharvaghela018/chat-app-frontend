@@ -72,15 +72,28 @@ export const AudioRecorderBar: React.FC<AudioRecorderBarProps> = ({
 
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
+                    channelCount: 1, // Mono voice capture (eliminates phase cancellation & robotic comb filtering)
+                    sampleRate: 48000,
+                    sampleSize: 16,
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true,
+                    // Chromium voice processing extensions
+                    ...( {
+                        googEchoCancellation: true,
+                        googAutoGainControl: true,
+                        googNoiseSuppression: true,
+                        googHighpassFilter: true, // Filters out low-frequency mic rumble & AC hum
+                    } as any ),
                 },
             })
 
             streamRef.current = stream
             const mimeType = getSupportedMimeType()
-            const options: MediaRecorderOptions = mimeType ? { mimeType } : {}
+            const options: MediaRecorderOptions = {
+                ...(mimeType ? { mimeType } : {}),
+                audioBitsPerSecond: 32000, // 32 kbps mono Opus (WhatsApp / Telegram voice note standard)
+            }
             const mediaRecorder = new MediaRecorder(stream, options)
             mediaRecorderRef.current = mediaRecorder
             audioChunksRef.current = []
@@ -91,8 +104,8 @@ export const AudioRecorderBar: React.FC<AudioRecorderBarProps> = ({
                 }
             }
 
-            // Start with 100ms chunks to continuously collect audio slices
-            mediaRecorder.start(100)
+            // Collect in 1000ms intervals to prevent 10x/sec EBML cluster fragmentation
+            mediaRecorder.start(1000)
             startTimeRef.current = Date.now()
             setSeconds(0)
             setMode("recording")

@@ -19,7 +19,8 @@ import {
     ArrowLeft,
     Users,
     Moon,
-    Sun
+    Sun,
+    Laptop
 } from "lucide-react"
 
 import { type RootState } from "@/redux/store"
@@ -28,10 +29,12 @@ import { usePatchApi } from "@/hooks/api"
 import { setUser } from "@/redux/slices/auth.slice"
 import PrivacySettings from "./components/PrivacySettings"
 import SecuritySettings from "./components/SecuritySettings"
+import DeviceSettings from "./components/DeviceSettings"
 import useToast from "@/hooks/toast"
 
 type SettingsTab = 
     | "profile" 
+    | "devices"
     | "security" 
     | "privacy" 
     | "visibility" 
@@ -50,6 +53,7 @@ const SettingsPage = () => {
     const [activeTab, setActiveTab] = useState<SettingsTab>("privacy")
     const [copiedUsername, setCopiedUsername] = useState(false)
     const [copiedId, setCopiedId] = useState(false)
+    const [isDevicesOpen, setIsDevicesOpen] = useState(true)
     const [isVisibilityOpen, setIsVisibilityOpen] = useState(false)
     const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
 
@@ -94,6 +98,7 @@ const SettingsPage = () => {
 
     const navTabs = [
         { id: "profile" as SettingsTab, label: "Profile", icon: User },
+        { id: "devices" as SettingsTab, label: "Linked Devices", icon: Laptop },
         { id: "security" as SettingsTab, label: "Security", icon: Shield },
         { id: "privacy" as SettingsTab, label: "Privacy", icon: Lock },
         { id: "visibility" as SettingsTab, label: "Account Visibility", icon: Eye },
@@ -109,6 +114,9 @@ const SettingsPage = () => {
         if (tabId === "profile") {
             navigate(ROUTES.PROFILE.path)
             return
+        }
+        if (tabId === "devices") {
+            setIsDevicesOpen(true)
         }
         if (tabId === "visibility") {
             setIsVisibilityOpen(true)
@@ -274,10 +282,43 @@ const SettingsPage = () => {
                             </div>
                         </div>
 
-                        {/* 2. Security Accordion Section */}
+                        {/* 2. Linked Devices & Session Management */}
+                        <div id="section-devices" className="overflow-hidden rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/70 shadow-sm transition-all">
+                            <button
+                                type="button"
+                                onClick={() => setIsDevicesOpen(!isDevicesOpen)}
+                                className="flex w-full items-center justify-between p-5 sm:p-6 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left cursor-pointer"
+                            >
+                                <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+                                    <div className="flex h-10 w-10 sm:h-11 sm:w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 shadow-2xs">
+                                        <Laptop size={20} className="stroke-[2.5]" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                                            Linked Devices & Sessions
+                                        </h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                                            Manage logged-in devices, track location & IP addresses, and revoke remote sessions.
+                                        </p>
+                                    </div>
+                                </div>
+                                <ChevronDown
+                                    size={20}
+                                    className={`text-slate-400 transition-transform duration-300 flex-shrink-0 ml-2 ${isDevicesOpen ? "rotate-180 text-purple-600 dark:text-purple-400" : ""}`}
+                                />
+                            </button>
+
+                            {isDevicesOpen && (
+                                <div className="border-t border-slate-100 dark:border-slate-800/80 p-5 sm:p-7 pt-5 animate-in slide-in-from-top-2 duration-200">
+                                    <DeviceSettings />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 3. Security Accordion Section */}
                         <SecuritySettings />
 
-                        {/* 3. Privacy Accordion Section */}
+                        {/* 4. Privacy Accordion Section */}
                         <PrivacySettings />
 
                         {/* 4. Account Visibility Accordion Section */}

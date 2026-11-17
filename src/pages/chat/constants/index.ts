@@ -17,6 +17,7 @@ export const CHAT_EVENTS = {
     NEW_REQUEST: "new_request",
     USER_STATUS: "user_status",
     ONLINE_USERS: "online_users",
+    SESSION_REVOKED: "session_revoked",
 } as const
 
 export const GROUP_EVENTS = {

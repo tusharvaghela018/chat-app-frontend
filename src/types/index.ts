@@ -84,3 +84,20 @@ export interface IConversation {
     created_at: string
     updated_at: string
 }
+
+export interface IDeviceSession {
+    id: string;
+    device_type: "desktop" | "mobile" | "tablet" | "browser" | string;
+    device_name: string;
+    browser: string;
+    os: string;
+    ip_address: string;
+    location: string;
+    city?: string | null;
+    region?: string | null;
+    country?: string | null;
+    country_code?: string | null;
+    last_active_at: string;
+    created_at: string;
+    is_current: boolean;
+}

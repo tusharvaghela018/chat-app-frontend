@@ -77,12 +77,15 @@ const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
     googAudioMirroring: { ideal: false },
 } as any;
 
-const getVideoConstraints = (facing: "user" | "environment" = "user"): MediaTrackConstraints => ({
-    width: { ideal: 1280, max: 1280 },
-    height: { ideal: 720, max: 720 },
-    frameRate: { ideal: 30, max: 30 },
-    facingMode: { ideal: facing },
-});
+const getVideoConstraints = (facing: "user" | "environment" = "user"): MediaTrackConstraints => {
+    const isPortrait = typeof window !== "undefined" && window.innerHeight > window.innerWidth;
+    return {
+        width: { ideal: isPortrait ? 720 : 1280 },
+        height: { ideal: isPortrait ? 1280 : 720 },
+        frameRate: { ideal: 30, max: 30 },
+        facingMode: { ideal: facing },
+    };
+};
 
 // Helper to optimize SDP for crystal-clear Opus audio and low latency
 function optimizeSdp(sdp: string): string {

@@ -156,8 +156,8 @@ export const CallModal: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Floating Local PiP Video (Self Preview) */}
-                            <div className="group absolute top-4 right-4 z-20 w-32 sm:w-44 aspect-video rounded-2xl overflow-hidden border-2 border-slate-700/80 bg-slate-900 shadow-2xl">
+                            {/* Floating Local PiP Video (Self Preview) - Vertical Portrait Ratio */}
+                            <div className="group absolute top-4 right-4 z-20 w-28 sm:w-36 aspect-[3/4] rounded-2xl overflow-hidden border-2 border-slate-700/80 bg-slate-900 shadow-2xl">
                                 {!isVideoOff && localStream ? (
                                     <>
                                         <video

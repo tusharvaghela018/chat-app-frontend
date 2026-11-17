@@ -8,7 +8,8 @@ import {
     Phone,
     Star,
     Archive,
-    Search
+    Search,
+    Laptop
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useSelector } from "react-redux"
@@ -404,6 +405,17 @@ const Sidebar = ({
 
                 {/* Bottom Section: Theme Toggle & User Profile */}
                 <div className="flex flex-col items-center gap-3 w-full px-2">
+                    {/* Linked Devices & Sessions Shortcut */}
+                    <button
+                        type="button"
+                        onClick={() => navigate(ROUTES.SETTINGS.path)}
+                        className="h-10 w-10 flex items-center justify-center rounded-2xl bg-slate-200/60 hover:bg-slate-300/70 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                        title="Linked Devices & Sessions"
+                        aria-label="Linked Devices & Sessions"
+                    >
+                        <Laptop size={17} className="text-indigo-500 dark:text-indigo-400" />
+                    </button>
+
                     {/* Theme Toggle */}
                     <button
                         type="button"

@@ -852,8 +852,9 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         setIsUploadingMedia(true)
 
         try {
+            const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm"
             const formData = new FormData()
-            formData.append("file", blob, `voice_note_${Date.now()}.webm`)
+            formData.append("file", blob, `voice_note_${Date.now()}.${ext}`)
             formData.append("duration", String(duration))
 
             const response = await axiosInstance.post("/upload/media", formData, {

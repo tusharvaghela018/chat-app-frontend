@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { useSelector } from "react-redux";
-import { getUser } from "@/redux/slices/auth.slice";
+import { getUser, clearAuth } from "@/redux/slices/auth.slice";
+import { store } from "@/redux/store";
+import { addToast } from "@/redux/slices/toast.slice";
 import axiosInstance from "@/api/axios";
 
 let globalSocket: Socket | null = null;
@@ -77,6 +79,23 @@ export const useSocket = (): Socket | null => {
                     newSocket.on("connect_error", (err) =>
                         console.log("❌ Socket error:", err.message)
                     );
+
+                    newSocket.on("session_revoked", (data: any) => {
+                        console.warn("⚠️ Session revoked:", data);
+                        store.dispatch(clearAuth());
+                        store.dispatch(addToast({
+                            message: data?.message || "Your session has been logged out from another device.",
+                            type: "warning",
+                            duration: 5000
+                        }));
+                        if (globalSocket) {
+                            globalSocket.disconnect();
+                            globalSocket = null;
+                        }
+                        setTimeout(() => {
+                            window.location.href = "/login";
+                        }, 500);
+                    });
 
                     globalSocket = newSocket;
                     listeners.forEach(fn => fn(newSocket));

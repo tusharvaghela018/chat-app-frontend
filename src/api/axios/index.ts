@@ -9,6 +9,27 @@ const axiosInstance = axios.create({
     withCredentials: true
 });
 
+// Detect Windows 11 using User-Agent Client Hints
+let detectedPlatform = "";
+if (typeof navigator !== "undefined" && (navigator as any).userAgentData) {
+    (navigator as any).userAgentData.getHighEntropyValues?.(['platformVersion'])?.then((ua: any) => {
+        const major = parseInt(ua.platformVersion?.split('.')[0] || "0", 10);
+        if (major >= 13) {
+            detectedPlatform = "Windows 11";
+        }
+    }).catch(() => {});
+}
+
+// Attach client timezone and platform hints to all outgoing requests
+axiosInstance.interceptors.request.use((config) => {
+    try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz) config.headers["x-client-timezone"] = tz;
+        if (detectedPlatform) config.headers["x-client-os"] = detectedPlatform;
+    } catch {}
+    return config;
+});
+
 axiosInstance.interceptors.response.use(
     (response) => {
         const showToast = response?.data?.show_toast;
