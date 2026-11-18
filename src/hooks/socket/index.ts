@@ -4,6 +4,8 @@ import { useSelector } from "react-redux";
 import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { store } from "@/redux/store";
 import { addToast } from "@/redux/slices/toast.slice";
+import { clearLocalSecrets } from "@/utils/indexeddb";
+import { clearSessionKeys } from "@/utils/crypto";
 import axiosInstance from "@/api/axios";
 
 let globalSocket: Socket | null = null;
@@ -82,6 +84,8 @@ export const useSocket = (): Socket | null => {
 
                     newSocket.on("session_revoked", (data: any) => {
                         console.warn("⚠️ Session revoked:", data);
+                        clearLocalSecrets();
+                        clearSessionKeys();
                         store.dispatch(clearAuth());
                         store.dispatch(addToast({
                             message: data?.message || "Your session has been logged out from another device.",
