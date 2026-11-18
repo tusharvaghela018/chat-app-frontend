@@ -5,7 +5,8 @@ import {
     MessageSquare, LogOut,
     ChevronDown, ShieldCheck, Bell,
     Home, Menu, X, User as UserIcon,
-    Settings as SettingsIcon
+    Settings as SettingsIcon,
+    Loader2
 } from "lucide-react";
 import { getUser, clearAuth } from "@/redux/slices/auth.slice";
 import { ROUTES } from "@/constants/routes";
@@ -28,6 +29,7 @@ export default function Navbar() {
     
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
     
     const dropRef = useRef<HTMLDivElement>(null);
 
@@ -48,15 +50,20 @@ export default function Navbar() {
     }, [location.pathname]);
 
     const logout = async () => {
+        if (isLoggingOut) return;
+        setIsLoggingOut(true);
         try {
             await axiosInstance.post("/auth/logout");
         } catch {
             // Ignore error if already logged out
+        } finally {
+            await clearLocalSecrets();
+            clearSessionKeys();
+            dispatch(clearAuth());
+            setIsLoggingOut(false);
+            setIsProfileOpen(false);
+            navigate("/");
         }
-        await clearLocalSecrets();
-        clearSessionKeys();
-        dispatch(clearAuth());
-        navigate("/");
     };
 
     const initials = user?.name 
@@ -203,11 +210,19 @@ export default function Navbar() {
                                 <div className="border-t border-slate-100 dark:border-slate-800/80 mt-1.5 pt-1.5">
                                     <button
                                         type="button"
-                                        onClick={logout}
-                                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-xs font-bold text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            logout();
+                                        }}
+                                        disabled={isLoggingOut}
+                                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-xs font-bold text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer disabled:opacity-50"
                                     >
-                                        <LogOut size={15} />
-                                        <span>Sign out</span>
+                                        {isLoggingOut ? (
+                                            <Loader2 size={15} className="animate-spin text-red-600 dark:text-red-400" />
+                                        ) : (
+                                            <LogOut size={15} />
+                                        )}
+                                        <span>{isLoggingOut ? "Signing out..." : "Sign out"}</span>
                                     </button>
                                 </div>
                             </div>
@@ -248,6 +263,24 @@ export default function Navbar() {
                                 </Link>
                             );
                         })}
+
+                        {user && (
+                            <div className="border-t border-slate-200 dark:border-slate-800 pt-2 mt-1">
+                                <button
+                                    type="button"
+                                    onClick={logout}
+                                    disabled={isLoggingOut}
+                                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                    {isLoggingOut ? (
+                                        <Loader2 size={18} className="animate-spin text-red-600 dark:text-red-400" />
+                                    ) : (
+                                        <LogOut size={18} />
+                                    )}
+                                    <span>{isLoggingOut ? "Signing out..." : "Sign out"}</span>
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

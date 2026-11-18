@@ -30,6 +30,8 @@ axiosInstance.interceptors.request.use((config) => {
     return config;
 });
 
+let last401ToastTime = 0;
+
 axiosInstance.interceptors.response.use(
     (response) => {
         const showToast = response?.data?.show_toast;
@@ -56,7 +58,9 @@ axiosInstance.interceptors.response.use(
             case 401:
                 clearLocalSecrets();
                 store.dispatch(clearAuth());
-                if (showToast) {
+                const now = Date.now();
+                if (showToast && now - last401ToastTime > 4000) {
+                    last401ToastTime = now;
                     store.dispatch(addToast({ message, type: "error" }));
                 }
                 break;

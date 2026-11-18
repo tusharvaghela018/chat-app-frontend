@@ -69,13 +69,15 @@ const DeviceSettings = () => {
     const { mutate: revokeSession, isPending: isRevokingSingle } = useDeleteApi(
         "/auth/sessions",
         {
-            onSuccess: (res) => {
-                toast.success(res?.message || "Device logged out successfully");
+            onSuccess: () => {
                 setConfirmRevokeId(null);
                 queryClient.invalidateQueries({ queryKey: ["auth-sessions"] });
             },
             onError: (err: any) => {
-                toast.error(err?.response?.data?.message || "Failed to log out device");
+                // Only show manual toast if axios interceptor didn't show one
+                if (!err?.response?.data?.show_toast) {
+                    toast.error(err?.response?.data?.message || "Failed to log out device");
+                }
             }
         }
     );
@@ -84,13 +86,14 @@ const DeviceSettings = () => {
     const { mutate: revokeOtherSessions, isPending: isRevokingAll } = useDeleteApi(
         "/auth/sessions/other",
         {
-            onSuccess: (res) => {
-                toast.success(res?.message || "Logged out of all other devices");
+            onSuccess: () => {
                 setConfirmRevokeAll(false);
                 queryClient.invalidateQueries({ queryKey: ["auth-sessions"] });
             },
             onError: (err: any) => {
-                toast.error(err?.response?.data?.message || "Failed to log out other devices");
+                if (!err?.response?.data?.show_toast) {
+                    toast.error(err?.response?.data?.message || "Failed to log out other devices");
+                }
             }
         }
     );
@@ -336,9 +339,16 @@ const DeviceSettings = () => {
                                                                 type="button"
                                                                 onClick={() => handleRevokeSingle(session.id)}
                                                                 disabled={isRevokingSingle}
-                                                                className="px-3 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition-all cursor-pointer disabled:opacity-50"
                                                             >
-                                                                {isRevokingSingle ? "Logging out..." : "Confirm"}
+                                                                {isRevokingSingle ? (
+                                                                    <>
+                                                                        <Loader2 size={12} className="animate-spin" />
+                                                                        <span>Logging out...</span>
+                                                                    </>
+                                                                ) : (
+                                                                    <span>Confirm</span>
+                                                                )}
                                                             </button>
                                                         </div>
                                                     ) : (

@@ -23,6 +23,12 @@ const toastSlice = createSlice({
     initialState,
     reducers: {
         addToast: (state, action: PayloadAction<Omit<Toast, "id">>) => {
+            // Prevent identical duplicate toasts from stacking simultaneously
+            const isDuplicate = state.toasts.some(
+                (t) => t.message === action.payload.message && t.type === action.payload.type
+            );
+            if (isDuplicate) return;
+
             state.toasts.push({
                 ...action.payload,
                 id: crypto.randomUUID(),
