@@ -275,6 +275,17 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         {
             queryKey: `conversation-${user.id}`,
             enabled: !!user.id,
+            initialData: () => {
+                const list = (queryClient.getQueryData<any>(["conversations", undefined]) as any)?.data
+                    || (queryClient.getQueryData<any>(["conversations"]) as any)?.data
+                    || (queryClient.getQueryData<any>(["conversations-archived", undefined]) as any)?.data
+                    || (queryClient.getQueryData<any>(["conversations-archived"]) as any)?.data;
+                if (Array.isArray(list)) {
+                    const match = list.find((c: any) => c.sender_id === user.id || c.receiver_id === user.id);
+                    if (match) return { data: match };
+                }
+                return undefined;
+            },
         }
     )
 
