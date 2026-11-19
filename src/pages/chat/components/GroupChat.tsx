@@ -376,7 +376,17 @@ const GroupChat = ({ group, onGroupLeft, onOpenDM, onBack, onClose }: Props) => 
     const { data: messagesData, isFetching, isSuccess } = useGetApi<{ messages: IGroupMessage[], hasMore: boolean }>(
         `/groups/${group.id}/messages`,
         { limit: 30 },
-        { queryKey: `group-messages-${group.id}`, enabled: true, staleTime: 0 }
+        {
+            queryKey: `group-messages-${group.id}`,
+            enabled: true,
+            staleTime: 30 * 1000,
+            initialData: () => {
+                const cached = queryClient.getQueryData<any>([`group-messages-${group.id}`, { limit: 30 }])
+                    || queryClient.getQueryData<any>([`group-messages-${group.id}`]);
+                if (cached?.data?.messages) return cached;
+                return undefined;
+            }
+        }
     )
 
     const initialMsgs = (messagesData?.data as any)?.messages ?? []

@@ -334,7 +334,31 @@ const DirectChat = ({ user, onBack, onClose }: Props) => {
         {
             queryKey: `messages-${user.id}`,
             enabled: !!user.id,
-            staleTime: 0,
+            staleTime: 30 * 1000,
+            initialData: () => {
+                // Check if we already have cached messages in React Query for this user
+                const cached = queryClient.getQueryData<any>([`messages-${user.id}`, { limit: 30 }])
+                    || queryClient.getQueryData<any>([`messages-${user.id}`]);
+                if (cached?.data?.messages) return cached;
+
+                // Check sidebar conversation cache
+                const convs = (queryClient.getQueryData<any>(["conversations", undefined]) as any)?.data
+                    || (queryClient.getQueryData<any>(["conversations"]) as any)?.data
+                    || (queryClient.getQueryData<any>(["conversations-archived", undefined]) as any)?.data
+                    || (queryClient.getQueryData<any>(["conversations-archived"]) as any)?.data;
+                if (Array.isArray(convs)) {
+                    const match = convs.find((c: any) => c.sender_id === user.id || c.receiver_id === user.id);
+                    // If conversation is empty (0 messages) or pending, seed with empty array so empty chat opens instantly with 0ms delay!
+                    if (match && (!match.messages || match.messages.length === 0)) {
+                        return { data: { messages: [], hasMore: false } };
+                    }
+                    // If conversation has last message from sidebar, seed it immediately!
+                    if (match && match.messages && match.messages.length > 0) {
+                        return { data: { messages: match.messages, hasMore: true } };
+                    }
+                }
+                return undefined;
+            },
         }
     )
 
